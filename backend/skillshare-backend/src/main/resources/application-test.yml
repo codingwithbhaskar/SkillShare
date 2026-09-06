@@ -1,0 +1,11 @@
+# Points at the docker-compose Postgres+PostGIS container (see
+# docker-compose.yml at the repo root) for CI / integration-test parity.
+# Phase 2+ will likely replace this with Testcontainers'
+# @ServiceConnection auto-configuration instead of a fixed URL.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/skillshare_dev
+    username: postgres
+    password: postgres
+  flyway:
+    clean-disabled: false

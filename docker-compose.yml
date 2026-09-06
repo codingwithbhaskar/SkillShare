@@ -1,0 +1,31 @@
+# SkillShare — Docker Compose (Phase 1)
+#
+# Purpose: Postgres+PostGIS parity for Testcontainers/CI, NOT local day-to-day
+# dev — local dev runs against the native PostgreSQL 16 + PostGIS install on
+# port 5433 (see dev-status-and-next-steps.md). Host port 5434 is used here
+# deliberately so this container never collides with the native 16 (5433) or
+# 18 (5432) instances already running on this machine.
+#
+# Usage: docker compose up -d
+#
+services:
+  postgres:
+    image: postgis/postgis:16-3.5
+    container_name: skillshare-postgres-ci
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: skillshare_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - skillshare_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d skillshare_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  skillshare_pg_data:

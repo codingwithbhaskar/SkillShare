@@ -1,0 +1,6 @@
+[23:10:58] === SkillShare benchmark harness starting ===
+[23:10:58] Scales: 1000   Fresh: False   DB: skillshare_benchmark@localhost:5433
+[23:10:58] skillshare_benchmark already exists  -  reusing it (pass -Fresh to rebuild from scratch).
+[23:10:58] --- Scale 1000 workers ---
+[23:10:58] Generating synthetic data...
+[23:10:59] FAILED: psql -v scale=1000 -f D:\Dev\SkillShare\benchmark\sql\01_generate_synthetic_data.sql  (exit 3)  -  see D:\Dev\SkillShare\benchmark\run_log_20260901_231058.txt / D:\Dev\SkillShare\benchmark\results\generate_1000.log

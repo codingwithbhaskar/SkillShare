@@ -1,0 +1,45 @@
+# Local development — targets the native PostgreSQL 16 + PostGIS install on
+# this machine (port 5433, NOT the default 5432 — see
+# dev-status-and-next-steps.md for why 16/5433 was chosen over 18/5432).
+#
+# Set SKILLSHARE_DB_PASSWORD as an environment variable before running
+# (IntelliJ: Run Configuration -> Environment variables), rather than
+# hardcoding a real password into a file that may end up committed to git.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/skillshare_dev
+    username: postgres
+    password: ${SKILLSHARE_DB_PASSWORD}
+
+
+# Added in Phase 6 - Razorpay test/sandbox credentials. Not yet set (no
+# account created as of this addition, see dev-status-and-next-steps.md) -
+# RazorpayConfig's bean still constructs fine with these empty, so the app
+# still boots and every non-payment endpoint still works; only an actual
+# payment API call fails (with Razorpay's own auth error) until real
+# Test Mode keys are set here.
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+
+# Added in Phase 7 - JWT signing config. JWT_SECRET is NOT tied to any
+# external account (unlike SKILLSHARE_DB_PASSWORD/RAZORPAY_*) - it's purely
+# internal key material for signing our own tokens, so JwtService falls
+# back to a random in-memory key at startup if this is unset, rather than
+# failing to boot. That's fine for local dev/testing (tokens just won't
+# survive a restart); set a real, stable JWT_SECRET for anything else.
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration-ms: 86400000   # 24 hours
+
+# Dev-only: surface full exception details in error responses instead of
+# a bare "Internal Server Error", so admin-panel debugging doesn't require
+# tailing this terminal for every 500 - added temporarily during the
+# admin-panel build-out (2026-09-01), safe to remove once that work is
+# fully verified since it's dev-profile-only.
+server:
+  error:
+    include-stacktrace: always
+    include-message: always
+    include-binding-errors: always

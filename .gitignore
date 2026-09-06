@@ -1,0 +1,18 @@
+# --- IDE / OS junk (root-level project files) ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Python (benchmark scripts) ---
+__pycache__/
+*.pyc
+
+# --- Logs / local run artifacts ---
+*.log
+
+# Note: backend/ and frontend/ already have their own .gitignore files
+# (node_modules, target/, dist/, .env, etc.) which stay in effect regardless
+# of this root-level file.

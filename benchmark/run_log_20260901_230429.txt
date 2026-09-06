@@ -1,0 +1,3 @@
+[23:04:29] === SkillShare benchmark harness starting ===
+[23:04:29] Scales: 1000   Fresh: True   DB: skillshare_benchmark@localhost:5433
+[23:04:29] Dropping existing skillshare_benchmark (if any)...
