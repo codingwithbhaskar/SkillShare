@@ -48,6 +48,10 @@ once to fill in the real CORS origin.
    - **Runtime**: Render should auto-detect the `Dockerfile` and switch to
      Docker mode. If it doesn't, select Docker manually.
    - **Instance Type**: Free
+   - **Health Check Path**: `/actuator/health` — this endpoint is
+     unauthenticated on purpose (see `SecurityConfig`) and returns
+     `{"status":"UP"}` once the DB connection and Flyway migrations are
+     good, so Render only routes traffic after the app is actually ready.
 4. **Environment** tab — add these variables:
    | Key | Value |
    |---|---|

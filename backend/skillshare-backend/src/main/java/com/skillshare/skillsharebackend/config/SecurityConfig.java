@@ -115,6 +115,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/payments/webhook").permitAll()
+                        // Open the liveness/readiness probe: the hosting
+                        // platform (Render) polls /actuator/health from an
+                        // unauthenticated agent and marks the service down -
+                        // never routing traffic to it - if that returns 401.
+                        // Only "health" is exposed (management.endpoints.web
+                        // in application.yml) and show-details defaults to
+                        // "never", so this leaks nothing beyond UP/DOWN.
+                        .requestMatchers("/actuator/health").permitAll()
                         // Required for a STATELESS app: sendError() from
                         // authenticationEntryPoint/accessDeniedHandler below
                         // triggers an internal servlet forward to /error,
