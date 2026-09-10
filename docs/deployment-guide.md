@@ -61,9 +61,14 @@ once to fill in the real CORS origin.
    | `SKILLSHARE_DB_PASSWORD` | (from Step 1) |
    | `JWT_SECRET` | a random string — generate one with `openssl rand -base64 48` (Git Bash has `openssl`), or any long random string |
    | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` for now — **come back and update this in Step 4** |
+   | `APP_FRONTEND_BASE_URL` | `http://localhost:5173` for now — **required** (the app won't boot without it); it's the origin the password-reset email link points at. **Update it in Step 4** to the real Vercel URL. |
    | `RAZORPAY_KEY_ID` | your existing test-mode key (optional — app boots fine without it, only payment calls would fail) |
    | `RAZORPAY_KEY_SECRET` | same |
    | `RAZORPAY_WEBHOOK_SECRET` | same |
+
+   Password-reset emails are **off by default** and the app runs fine
+   without them (the reset link just gets written to the Render logs
+   instead of emailed). To turn on real email, see *Step 6* below.
 5. **Create Web Service.** First build takes a few minutes (compiling +
    pulling the JDK image). Once live, copy its URL — something like
    `https://skillshare-backend-xxxx.onrender.com`.
@@ -89,11 +94,16 @@ open the site a minute before you actually need it live.
 
 ## Step 4 — close the loop on CORS
 
-Back on Render → your service → **Environment** → edit
-`APP_CORS_ALLOWED_ORIGINS` → set it to your real Vercel URL from Step 3
-(e.g. `https://skillshare-xxxx.vercel.app`). Render redeploys automatically
-on save. If you also want Vercel's preview-deploy URLs to work (a different
-URL per branch/PR), add them comma-separated.
+Back on Render → your service → **Environment** → edit **two** variables to
+your real Vercel URL from Step 3 (e.g. `https://skillshare-xxxx.vercel.app`,
+scheme + host, no trailing slash):
+
+- `APP_CORS_ALLOWED_ORIGINS` — comma-separate if you also want Vercel's
+  per-branch preview URLs to work.
+- `APP_FRONTEND_BASE_URL` — single URL only (this is what the password-reset
+  link is built from).
+
+Render redeploys automatically on save.
 
 ## Step 5 — verify end to end
 
@@ -104,6 +114,30 @@ URL per branch/PR), add them comma-separated.
 - If login/API calls fail outright: check Render's **Logs** tab for a
   Flyway or datasource error first — most first-deploy issues are a typo
   in the Neon connection details.
+
+## Step 6 (optional) — password reset emails
+
+Without this, the "Forgot password?" flow still works end to end, but the
+reset link is written to Render's **Logs** instead of emailed — fine for a
+demo, awkward for real users. To send real email, use a free SMTP provider
+(Brevo gives 300 emails/day, no card):
+
+1. Sign up at **brevo.com** → **SMTP & API** → **SMTP** tab. Note the
+   server (`smtp-relay.brevo.com`), port (`587`), login, and generate an
+   **SMTP key** (this is the password, not your account password).
+2. Render → your service → **Environment**, add:
+   | Key | Value |
+   |---|---|
+   | `MAIL_HOST` | `smtp-relay.brevo.com` |
+   | `MAIL_PORT` | `587` |
+   | `MAIL_USERNAME` | your Brevo SMTP login |
+   | `MAIL_PASSWORD` | your Brevo SMTP key |
+   | `MAIL_FROM` | `SkillShare <you@yourdomain.com>` — must be a sender Brevo has verified (add/verify it under **Senders**) |
+3. Save. Render redeploys. Test: on the live site click **Forgot
+   password?**, enter a real address you can check, and confirm the email
+   arrives. If it doesn't, check Render **Logs** for a `[PASSWORD-RESET]`
+   line — a `failed to send` entry there means the SMTP creds or sender
+   aren't right yet.
 
 ## Optional — Razorpay webhook (closes a known gap)
 

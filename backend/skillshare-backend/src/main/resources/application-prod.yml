@@ -53,6 +53,13 @@ jwt:
 # Allowed origin(s) for CORS — the deployed Vercel frontend URL(s), comma-
 # separated if there's more than one (e.g. production + a preview deploy).
 # Read by SecurityConfig's CorsConfigurationSource bean.
+#
+# frontend-base-url is the single origin the password-reset email link
+# points at (no default here on purpose — the base application.yml's
+# localhost fallback would send users a dead link in prod). Set
+# APP_FRONTEND_BASE_URL to the same Vercel URL, e.g.
+# https://skill-share-lime.vercel.app
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+  frontend-base-url: ${APP_FRONTEND_BASE_URL}

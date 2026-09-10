@@ -9,6 +9,7 @@ import com.skillshare.skillsharebackend.auth.AccountStatusException;
 import com.skillshare.skillsharebackend.auth.AuthValidationException;
 import com.skillshare.skillsharebackend.auth.DuplicateEmailException;
 import com.skillshare.skillsharebackend.auth.InvalidCredentialsException;
+import com.skillshare.skillsharebackend.auth.InvalidResetTokenException;
 import com.skillshare.skillsharebackend.auth.UserNotFoundException;
 import com.skillshare.skillsharebackend.booking.BookingValidationException;
 import com.skillshare.skillsharebackend.booking.InvalidBookingTransitionException;
@@ -99,6 +100,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<String> handleInvalidCredentials(InvalidCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidResetTokenException.class)
+    public ResponseEntity<String> handleInvalidResetToken(InvalidResetTokenException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
     @ExceptionHandler(AccountStatusException.class)

@@ -54,6 +54,14 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
+            <!-- Added for the self-service password-reset flow: sends the
+                 reset link by email. The app still boots and every other
+                 feature works with no SMTP config - PasswordResetService
+                 falls back to logging the link (spring.mail.host unset). -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>

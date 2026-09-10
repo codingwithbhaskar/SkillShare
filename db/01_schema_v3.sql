@@ -83,6 +83,22 @@ CREATE TABLE worker_availability (
     CONSTRAINT uq_worker_availability_slot UNIQUE (worker_id, day_of_week, start_time, end_time)
 );
 
+-- Self-service "forgot password" flow (added V7). token_hash is the
+-- SHA-256 (hex) of the random token emailed to the user - the plaintext
+-- token is never stored. expires_at time-limits the link (30 min);
+-- used_at makes it single-use. See V7__password_reset.sql for the full
+-- rationale.
+CREATE TABLE password_reset_tokens (
+    token_id    BIGSERIAL   PRIMARY KEY,
+    user_id     BIGINT      NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    token_hash  VARCHAR(64) NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+
 -- ----------------------------------------------------------------------------
 -- B. Skills & services (M:N)
 -- ----------------------------------------------------------------------------
