@@ -7,8 +7,10 @@ import com.skillshare.skillsharebackend.domain.enums.UserRole;
 import com.skillshare.skillsharebackend.repository.UserRepository;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
 import com.skillshare.skillsharebackend.web.dto.AuthResponse;
+import com.skillshare.skillsharebackend.web.dto.ChangePasswordRequest;
 import com.skillshare.skillsharebackend.web.dto.LoginRequest;
 import com.skillshare.skillsharebackend.web.dto.RegisterRequest;
+import com.skillshare.skillsharebackend.web.dto.UpdateProfileRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -259,5 +261,98 @@ class AuthServiceTest {
         // workers.status, not users.status).
         assertEquals(AccountStatus.inactive, workerProfile.getStatus());
         verify(workerRepository).save(workerProfile);
+    }
+
+    // ---- updateProfile -----------------------------------------------
+
+    @Test
+    void updateProfile_updatesFullNameAndPhone_returnsFreshToken() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(user)).thenReturn("new-jwt-token");
+
+        AuthResponse response = service.updateProfile(1L, new UpdateProfileRequest("Asha P.", "9998887777"));
+
+        assertEquals("Asha P.", user.getFullName());
+        assertEquals("9998887777", user.getPhone());
+        assertEquals("new-jwt-token", response.token());
+        assertEquals("Asha P.", response.fullName());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateProfile_leavesFieldUntouched_whenNull() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        user.setPhone("9998887777");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(user)).thenReturn("jwt-token");
+
+        service.updateProfile(1L, new UpdateProfileRequest(null, null));
+
+        assertEquals("Asha Patil", user.getFullName());
+        assertEquals("9998887777", user.getPhone());
+    }
+
+    @Test
+    void updateProfile_rejectsBlankFullName() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(AuthValidationException.class,
+                () -> service.updateProfile(1L, new UpdateProfileRequest("  ", null)));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateProfile_rejectsUnknownUserId() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(UserNotFoundException.class,
+                () -> service.updateProfile(99L, new UpdateProfileRequest("New Name", null)));
+    }
+
+    // ---- changePassword ------------------------------------------------
+
+    @Test
+    void changePassword_succeeds_whenCurrentPasswordMatches() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("oldpass123", user.getPasswordHash())).thenReturn(true);
+        when(passwordEncoder.encode("newpass456")).thenReturn("new-hashed");
+
+        service.changePassword(1L, new ChangePasswordRequest("oldpass123", "newpass456"));
+
+        assertEquals("new-hashed", user.getPasswordHash());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void changePassword_rejectsWrongCurrentPassword() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrongpass", user.getPasswordHash())).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class,
+                () -> service.changePassword(1L, new ChangePasswordRequest("wrongpass", "newpass456")));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void changePassword_rejectsShortNewPassword() {
+        User user = savedUser(1L, UserRole.customer, "asha@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("oldpass123", user.getPasswordHash())).thenReturn(true);
+
+        assertThrows(AuthValidationException.class,
+                () -> service.changePassword(1L, new ChangePasswordRequest("oldpass123", "short")));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void changePassword_rejectsUnknownUserId() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(UserNotFoundException.class,
+                () -> service.changePassword(99L, new ChangePasswordRequest("oldpass123", "newpass456")));
     }
 }

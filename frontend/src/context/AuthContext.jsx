@@ -20,6 +20,13 @@ export function AuthProvider({ children }) {
     return data
   }, [])
 
+  const updateProfile = useCallback(async ({ fullName, phone }) => {
+    const { data } = await apiClient.put('/users/me', { fullName, phone })
+    setStoredAuth(data)
+    setAuth(data)
+    return data
+  }, [])
+
   const logout = useCallback(() => {
     setStoredAuth(null)
     setAuth(null)
@@ -31,9 +38,10 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(auth?.token),
       login,
       register,
+      updateProfile,
       logout,
     }),
-    [auth, login, register, logout],
+    [auth, login, register, updateProfile, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

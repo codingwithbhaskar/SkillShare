@@ -7,8 +7,10 @@ import com.skillshare.skillsharebackend.domain.enums.UserRole;
 import com.skillshare.skillsharebackend.repository.UserRepository;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
 import com.skillshare.skillsharebackend.web.dto.AuthResponse;
+import com.skillshare.skillsharebackend.web.dto.ChangePasswordRequest;
 import com.skillshare.skillsharebackend.web.dto.LoginRequest;
 import com.skillshare.skillsharebackend.web.dto.RegisterRequest;
+import com.skillshare.skillsharebackend.web.dto.UpdateProfileRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -138,6 +140,56 @@ public class AuthService {
         log.info("AuthService: user {} deactivated their own account", userId);
     }
 
+    /**
+     * Universal "edit my profile" - any role. Only {@code fullName}/
+     * {@code phone} are editable here (see {@code UpdateProfileRequest}'s
+     * javadoc for why email/role aren't); a null field is left untouched,
+     * matching {@code UpdateWorkerProfileRequest}'s partial-update
+     * convention. Returns a fresh token so the frontend's stored auth
+     * object (which embeds fullName - see {@code JwtService.generateToken})
+     * reflects the change immediately, without forcing a re-login.
+     */
+    @Transactional
+    public AuthResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("No account found for id " + userId));
+        if (request.fullName() != null) {
+            if (request.fullName().isBlank()) {
+                throw new AuthValidationException("fullName cannot be blank");
+            }
+            user.setFullName(request.fullName());
+        }
+        if (request.phone() != null) {
+            user.setPhone(request.phone());
+        }
+        userRepository.save(user);
+        log.info("AuthService: user {} updated their profile", userId);
+        return toAuthResponse(user);
+    }
+
+    /**
+     * Self-service password change - requires the current password
+     * (unlike {@code PasswordResetService}, which is for when the caller
+     * doesn't know it). Deliberately does not revoke any JWT already
+     * issued - this app has no token-revocation mechanism, same
+     * documented limitation as {@link #deactivateSelf}.
+     */
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("No account found for id " + userId));
+        if (request.currentPassword() == null
+                || !passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+        if (request.newPassword() == null || request.newPassword().length() < 8) {
+            throw new AuthValidationException("password must be at least 8 characters");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+        log.info("AuthService: user {} changed their password", userId);
+    }
+
     private void validateRegistration(RegisterRequest request) {
         if (request.role() == null) {
             throw new AuthValidationException("role is required (admin, customer, or worker)");
@@ -155,6 +207,7 @@ public class AuthService {
 
     private AuthResponse toAuthResponse(User user) {
         String token = jwtService.generateToken(user);
-        return new AuthResponse(token, user.getUserId(), user.getRole(), user.getFullName(), user.getEmail());
+        return new AuthResponse(
+                token, user.getUserId(), user.getRole(), user.getFullName(), user.getEmail(), user.getPhone());
     }
 }
