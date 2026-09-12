@@ -347,7 +347,7 @@ class BookingServiceTest {
         Booking confirmed = fullBookingWithWorker(BookingStatus.confirmed, 2L);
         when(bookingRepository.findById(4L)).thenReturn(Optional.of(confirmed));
         WorkerStats stats = new WorkerStats(2L, 12L, 10L, 1L, 8L, new BigDecimal("4.50"));
-        when(workerStatsRepository.findById(2L)).thenReturn(Optional.of(stats));
+        when(workerStatsRepository.findAllById(List.of(2L))).thenReturn(List.of(stats));
 
         BookingResponse response = service.getBooking(4L);
 
@@ -367,7 +367,9 @@ class BookingServiceTest {
         // rating rather than a NullPointerException.
         Booking confirmed = fullBookingWithWorker(BookingStatus.confirmed, 2L);
         when(bookingRepository.findById(4L)).thenReturn(Optional.of(confirmed));
-        when(workerStatsRepository.findById(2L)).thenReturn(Optional.empty());
+        // workerStatsRepository.findAllById left unstubbed - Mockito's
+        // default for a List-returning method is an empty list, exactly
+        // matching "no mv_worker_stats row exists yet" for this worker.
 
         BookingResponse response = service.getBooking(4L);
 

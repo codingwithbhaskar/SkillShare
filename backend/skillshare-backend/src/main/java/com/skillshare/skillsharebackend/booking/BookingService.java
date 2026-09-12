@@ -6,6 +6,7 @@ import com.skillshare.skillsharebackend.domain.BookingSkill;
 import com.skillshare.skillsharebackend.domain.Location;
 import com.skillshare.skillsharebackend.domain.Skill;
 import com.skillshare.skillsharebackend.domain.User;
+import com.skillshare.skillsharebackend.domain.Worker;
 import com.skillshare.skillsharebackend.domain.WorkerStats;
 import com.skillshare.skillsharebackend.domain.enums.AccountStatus;
 import com.skillshare.skillsharebackend.domain.enums.BookingStatus;
@@ -33,7 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Phase 5 - booking lifecycle. {@link #createBooking(CreateBookingRequest)}
@@ -185,9 +191,7 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public List<BookingResponse> getBookingsForCustomer(Long customerId) {
-        return bookingRepository.findByCustomer_UserId(customerId).stream()
-                .map(this::toResponseWithReviewFlag)
-                .toList();
+        return toResponsesWithReviewFlag(bookingRepository.findByCustomer_UserId(customerId));
     }
 
     @Transactional(readOnly = true)
@@ -279,19 +283,52 @@ public class BookingService {
     }
 
     private BookingResponse toResponseWithReviewFlag(Booking booking) {
-        boolean reviewed = booking.getStatus() == BookingStatus.completed
-                && reviewRepository.existsByBooking_BookingId(booking.getBookingId());
-        // Enriched with mv_worker_stats (rating), unlike the plain
-        // BookingResponse.from(booking, reviewed) the write-path methods
-        // use - this is the path GET /api/bookings/{id} and the list
-        // endpoint both go through, i.e. everything the frontend actually
-        // renders long-term (every action reloads via one of these two).
-        AssignedWorkerResponse worker = null;
-        if (booking.getWorker() != null) {
-            WorkerStats stats = workerStatsRepository.findById(booking.getWorker().getWorkerId()).orElse(null);
-            worker = AssignedWorkerResponse.from(booking.getWorker(), stats);
-        }
-        return BookingResponse.from(booking, reviewed, worker);
+        return toResponsesWithReviewFlag(List.of(booking)).get(0);
+    }
+
+    /**
+     * Batched form of the above - one {@code reviews} query and one
+     * {@code mv_worker_stats} query for the WHOLE list, not one of each
+     * per booking. {@code getBookingsForCustomer} (a list endpoint) was
+     * originally written as {@code .map(this::toResponseWithReviewFlag)},
+     * which is a real N+1: up to 2N extra round trips for N bookings.
+     * Harmless on localhost, but a genuine, measurable slowdown on a
+     * cross-region deployment (browser -&gt; Render -&gt; Neon) - confirmed
+     * live 2026-09-12. {@code getBooking}'s single-booking callers reuse
+     * this too via {@link #toResponseWithReviewFlag}, just with a
+     * one-element list (no regression, same query count as before for
+     * that case).
+     */
+    private List<BookingResponse> toResponsesWithReviewFlag(List<Booking> bookings) {
+        List<Long> completedBookingIds = bookings.stream()
+                .filter(b -> b.getStatus() == BookingStatus.completed)
+                .map(Booking::getBookingId)
+                .toList();
+        Set<Long> reviewedBookingIds = completedBookingIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(reviewRepository.findBookingIdsWithReview(completedBookingIds));
+
+        List<Long> workerIds = bookings.stream()
+                .map(Booking::getWorker)
+                .filter(Objects::nonNull)
+                .map(Worker::getWorkerId)
+                .distinct()
+                .toList();
+        Map<Long, WorkerStats> statsByWorkerId = workerIds.isEmpty()
+                ? Map.of()
+                : workerStatsRepository.findAllById(workerIds).stream()
+                        .collect(Collectors.toMap(WorkerStats::getWorkerId, stats -> stats));
+
+        return bookings.stream()
+                .map(booking -> {
+                    boolean reviewed = reviewedBookingIds.contains(booking.getBookingId());
+                    AssignedWorkerResponse worker = booking.getWorker() != null
+                            ? AssignedWorkerResponse.from(
+                                    booking.getWorker(), statsByWorkerId.get(booking.getWorker().getWorkerId()))
+                            : null;
+                    return BookingResponse.from(booking, reviewed, worker);
+                })
+                .toList();
     }
 
     private void requireCustomerOrAdmin(Booking booking, AuthenticatedUser caller) {

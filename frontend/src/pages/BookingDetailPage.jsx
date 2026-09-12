@@ -68,7 +68,18 @@ export default function BookingDetailPage() {
 
   const reload = useCallback(async () => {
     try {
-      const b = await fetchBooking(bookingId)
+      // fetchPayment doesn't depend on fetchBooking's result (both only
+      // need bookingId, already in hand from useParams) - run them
+      // concurrently rather than one-after-another. On a cross-region
+      // deployment (browser -> Render -> Neon) each round trip costs
+      // real time, and this page was paying for two of them in serial
+      // for no reason.
+      const [bookingResult, paymentResult] = await Promise.allSettled([
+        fetchBooking(bookingId),
+        fetchPayment(bookingId),
+      ])
+      if (bookingResult.status === 'rejected') throw bookingResult.reason
+      const b = bookingResult.value
       setBooking(b)
       // BookingResponse now carries `reviewed` (closing the dangling-
       // review-form gap from the Phase 8 full retest) - sync local state
@@ -76,11 +87,9 @@ export default function BookingDetailPage() {
       // a fresh page load of an already-reviewed booking shows the
       // "Thanks for your review!" card immediately instead of the form.
       setReviewSubmitted(b.reviewed)
-      try {
-        setPayment(await fetchPayment(bookingId))
-      } catch {
-        setPayment(null) // no payment/order created yet — not an error state
-      }
+      // A rejected paymentResult just means no payment/order created yet
+      // for this booking — not an error state.
+      setPayment(paymentResult.status === 'fulfilled' ? paymentResult.value : null)
     } catch (err) {
       setError(extractErrorMessage(err, 'Could not load this booking.'))
     }
