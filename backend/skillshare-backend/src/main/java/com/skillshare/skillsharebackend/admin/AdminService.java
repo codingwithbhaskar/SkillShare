@@ -230,6 +230,7 @@ public class AdminService {
         }
         Skill skill = skillRepository.save(Skill.builder()
                 .skillName(name)
+                .category(blankToNull(request.category()))
                 .description(blankToNull(request.description()))
                 .build());
         return SkillResponse.from(skill);
@@ -244,6 +245,7 @@ public class AdminService {
             throw new AdminValidationException("A skill named \"" + name + "\" already exists");
         }
         skill.setSkillName(name);
+        skill.setCategory(blankToNull(request.category()));
         skill.setDescription(blankToNull(request.description()));
         skillRepository.save(skill);
         return SkillResponse.from(skill);

@@ -10,7 +10,7 @@ import { EditIcon, TrashIcon, WrenchIcon } from '../components/icons.jsx'
 import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const EMPTY_SERVICE_FORM = { serviceName: '', category: '', description: '' }
-const EMPTY_SKILL_FORM = { skillName: '', description: '' }
+const EMPTY_SKILL_FORM = { skillName: '', category: '', description: '' }
 
 export default function AdminCatalogPage() {
   useDocumentTitle('Manage Catalog')
@@ -227,7 +227,7 @@ function SkillsManager() {
 
   function startEdit(skill) {
     setEditingId(skill.skillId)
-    setForm({ skillName: skill.skillName, description: skill.description || '' })
+    setForm({ skillName: skill.skillName, category: skill.category || '', description: skill.description || '' })
     setFormError('')
   }
 
@@ -287,6 +287,7 @@ function SkillsManager() {
               <div className="d-flex justify-content-between align-items-start gap-2">
                 <div>
                   <div className="fw-semibold">{s.skillName}</div>
+                  {s.category && <div className="text-muted small">{s.category}</div>}
                   {s.description && <div className="small mt-1 text-muted">{s.description}</div>}
                 </div>
                 <div className="d-flex gap-1 flex-shrink-0">
@@ -320,6 +321,19 @@ function SkillsManager() {
                 value={form.skillName}
                 onChange={(e) => setForm({ ...form, skillName: e.target.value })}
               />
+            </div>
+            <div className="mb-2">
+              <label className="form-label small mb-1">Category</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="e.g. Plumbing"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              />
+              <div className="form-text">
+                Matches a service's category so the booking form can filter skills by service.
+              </div>
             </div>
             <div className="mb-3">
               <label className="form-label small mb-1">Description</label>

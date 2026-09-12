@@ -70,6 +70,31 @@ export default function NewBookingPage() {
     setSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
   }
 
+  const selectedService = services.find((s) => String(s.serviceId) === String(serviceId))
+  // Only offer skills relevant to the picked service's category (e.g.
+  // choosing "Plumbing" shouldn't list "Ceiling Fan Installation") - a
+  // skill with no category set (uncategorized, e.g. one an admin added
+  // without picking one) still shows for every service rather than
+  // silently disappearing. Nothing shows until a service is picked -
+  // "skills needed" is meaningless without a service to attach them to.
+  const relevantSkills = selectedService
+    ? skills.filter((s) => !s.category || s.category === selectedService.category)
+    : []
+
+  function handleServiceChange(newServiceId) {
+    setServiceId(newServiceId)
+    // Drop any already-picked skill that's no longer relevant to the
+    // newly-chosen service, rather than silently submitting a
+    // skill/service combination the customer never actually intended.
+    const newService = services.find((s) => String(s.serviceId) === String(newServiceId))
+    setSkillIds((prev) =>
+      prev.filter((id) => {
+        const skill = skills.find((s) => s.skillId === id)
+        return skill && (!skill.category || !newService || skill.category === newService.category)
+      }),
+    )
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setSubmitError('')
@@ -134,7 +159,7 @@ export default function NewBookingPage() {
             id="service"
             className="form-select"
             value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
+            onChange={(e) => handleServiceChange(e.target.value)}
             required
           >
             <option value="" disabled>Choose a service…</option>
@@ -146,8 +171,11 @@ export default function NewBookingPage() {
 
         <div className="mb-3">
           <span className="form-label d-block">Skills needed</span>
+          {!selectedService && (
+            <p className="text-muted small mb-2">Choose a service above to see the skills relevant to it.</p>
+          )}
           <div className="d-flex flex-wrap gap-2">
-            {skills.map((s) => {
+            {relevantSkills.map((s) => {
               const active = skillIds.includes(s.skillId)
               return (
                 <button

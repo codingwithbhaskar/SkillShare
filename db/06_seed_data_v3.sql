@@ -29,13 +29,13 @@ VALUES
 -- Skills & services
 -- ----------------------------------------------------------------------------
 
-INSERT INTO skills (skill_name, description) VALUES
-    ('Wiring',              'Household electrical wiring'),
-    ('Fuse Box Repair',     'Diagnosing and repairing fuse/breaker boxes'),
-    ('Pipe Fitting',        'Fitting and joining plumbing pipes'),
-    ('Drain Cleaning',      'Clearing blocked drains'),
-    ('AC Repair',           'Air conditioner servicing and repair'),
-    ('Furniture Assembly',  'Assembling flat-pack furniture');
+INSERT INTO skills (skill_name, category, description) VALUES
+    ('Wiring',              'Electrical',        'Household electrical wiring'),
+    ('Fuse Box Repair',     'Electrical',        'Diagnosing and repairing fuse/breaker boxes'),
+    ('Pipe Fitting',        'Plumbing',          'Fitting and joining plumbing pipes'),
+    ('Drain Cleaning',      'Plumbing',          'Clearing blocked drains'),
+    ('AC Repair',           'Appliance Repair',  'Air conditioner servicing and repair'),
+    ('Furniture Assembly',  'Carpentry',         'Assembling flat-pack furniture');
 
 INSERT INTO services (service_name, category, description) VALUES
     ('Electrical Repair', 'Electrical', 'General household electrical repair work'),

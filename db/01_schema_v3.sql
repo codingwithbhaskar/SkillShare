@@ -106,6 +106,10 @@ CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens(user_id);
 CREATE TABLE skills (
     skill_id     BIGSERIAL PRIMARY KEY,
     skill_name   VARCHAR(100) NOT NULL UNIQUE,
+    -- Added V8 - lets the booking-creation form only offer skills
+    -- relevant to the service already picked (e.g. Plumbing), instead of
+    -- every skill in the catalogue. Nullable, same as services.category.
+    category     VARCHAR(100),
     description  TEXT
 );
 

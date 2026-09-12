@@ -27,6 +27,14 @@ public class Skill {
     @Column(name = "skill_name", nullable = false, unique = true, length = 100)
     private String skillName;
 
+    /** Added in V8 - lets the booking-creation form only offer skills
+     *  relevant to the service the customer already picked (e.g.
+     *  Plumbing) instead of every skill in the catalogue. Nullable, same
+     *  as {@link Service#getCategory()} - an uncategorized skill just
+     *  never gets filtered out of any service's list. */
+    @Column(name = "category", length = 100)
+    private String category;
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 }

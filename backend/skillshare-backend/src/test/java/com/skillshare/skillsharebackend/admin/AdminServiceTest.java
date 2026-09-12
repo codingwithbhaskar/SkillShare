@@ -288,7 +288,7 @@ class AdminServiceTest {
         when(skillRepository.findBySkillName("Wiring"))
                 .thenReturn(Optional.of(Skill.builder().skillId(1L).skillName("Wiring").build()));
 
-        assertThrows(AdminValidationException.class, () -> service.createSkill(new SkillRequest("Wiring", null)));
+        assertThrows(AdminValidationException.class, () -> service.createSkill(new SkillRequest("Wiring", null, null)));
     }
 
     // ---------------------------------------------------------------
