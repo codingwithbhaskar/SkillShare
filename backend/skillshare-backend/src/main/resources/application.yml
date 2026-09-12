@@ -26,53 +26,32 @@ spring:
       data-source-properties:
         connectTimeout: 10        # seconds - TCP connect to Postgres
         socketTimeout: 30         # seconds - abort a stuck read (query/handshake)
-  # SMTP for the password-reset email. All optional: with MAIL_HOST unset
-  # the app boots fine and PasswordResetService logs the reset link
-  # instead of emailing it. Set these as env vars (locally via the run
-  # config, in prod via the host dashboard) to send real mail.
-  mail:
-    host: ${MAIL_HOST:}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          # Belt-and-suspenders alongside PasswordResetMailer's @Async:
-          # JavaMailSender has no read/connect timeout by default, so a
-          # slow/unresponsive SMTP endpoint could otherwise tie up an
-          # async thread indefinitely instead of just failing loudly.
-          connectiontimeout: 10000
-          timeout: 10000
-          writetimeout: 10000
 
-# App-level settings (not Spring's own). frontend-base-url is the origin
-# the password-reset link points at - the deployed frontend in prod, the
-# Vite dev server locally.
+# App-level settings (not Spring's own).
 app:
+  # frontend-base-url is the origin the password-reset link points at -
+  # the deployed frontend in prod, the Vite dev server locally.
   frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
   mail:
     from: ${MAIL_FROM:SkillShare <no-reply@skillshare.local>}
+
+# Password-reset emails go through Brevo's HTTPS Transactional Email API
+# (https://api.brevo.com/v3/smtp/email), NOT raw SMTP - confirmed live
+# 2026-09-12 that Render blocks outbound SMTP (ports 587/465/25) on its
+# free tier as an anti-abuse measure, same policy most PaaS/cloud hosts
+# use, so plain SMTP was never going to work from there. The HTTPS API
+# needs only an API key, travels over port 443 (never blocked), and Brevo
+# still uses the same SMTP relay/sender config under the hood - it's just
+# not raw SMTP on the wire between us and them.
+#
+# All optional: with BREVO_API_KEY unset, PasswordResetMailer logs the
+# reset link instead of emailing it, same graceful-fallback stance as
+# every other optional integration in this project (Razorpay, JWT_SECRET).
+brevo:
+  api-key: ${BREVO_API_KEY:}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
-  health:
-    # Actuator auto-registers a MailHealthIndicator the moment a
-    # JavaMailSender bean exists (spring-boot-starter-mail is now always
-    # on the classpath, for password-reset emails) - it actively tries to
-    # connect to spring.mail.host as part of every /actuator/health call.
-    # With MAIL_HOST unset (the default - see the mail block above) that
-    # connection always fails, which drags the WHOLE health endpoint down
-    # to 503 even though the app itself is perfectly healthy - and a
-    # hosting platform's health check (e.g. Render's) then never sees a
-    # 200 and kills the deploy as "unhealthy". Confirmed live 2026-09-12.
-    # Mail delivery being unconfigured/down is not a reason to report the
-    # app itself as down, so this indicator is disabled outright.
-    mail:
-      enabled: false
