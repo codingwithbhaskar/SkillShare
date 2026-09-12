@@ -7,9 +7,6 @@ import com.skillshare.skillsharebackend.repository.PasswordResetTokenRepository;
 import com.skillshare.skillsharebackend.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,18 +27,15 @@ import java.util.HexFormat;
  * email belongs to a real account — the HTTP layer must not let a caller
  * probe which addresses are registered. When it <em>is</em> a real,
  * non-suspended account, a random token is generated, its SHA-256 hash
- * stored in {@code password_reset_tokens}, and a link carrying the
- * plaintext token emailed to the user.
+ * stored in {@code password_reset_tokens}, and {@link PasswordResetMailer}
+ * asked to email a link carrying the plaintext token — off the request
+ * thread (see that class's javadoc for why sending is never done here
+ * directly).
  *
  * <p>{@link #resetPassword} hashes the presented token, looks the row up
  * by that hash, checks it's unused and unexpired, then re-hashes the new
  * password (BCrypt, via {@link PasswordEncoder}) onto the user and stamps
  * the token {@code used_at}.
- *
- * <p>Email delivery: if {@code spring.mail.host} is configured a real
- * message is sent; otherwise the link is written to the log at WARN so
- * the flow is still testable locally without an SMTP account (same
- * "logging placeholder" stance as {@code LoggingNotificationSender}).
  */
 @Service
 @Slf4j
@@ -55,30 +49,22 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
-    private final boolean mailEnabled;
-    private final String mailFrom;
+    private final PasswordResetMailer mailer;
     private final String frontendBaseUrl;
 
     public PasswordResetService(
             UserRepository userRepository,
             PasswordResetTokenRepository tokenRepository,
             PasswordEncoder passwordEncoder,
-            JavaMailSender mailSender,
-            @Value("${spring.mail.host:}") String mailHost,
-            @Value("${app.mail.from:SkillShare <no-reply@skillshare.local>}") String mailFrom,
+            PasswordResetMailer mailer,
             @Value("${app.frontend-base-url:http://localhost:5173}") String frontendBaseUrl) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
-        this.mailEnabled = mailHost != null && !mailHost.isBlank();
-        this.mailFrom = mailFrom;
-        // Trailing slash would produce "...app//reset-password"; harmless
-        // for routing but ugly in the email, so trim it.
-        this.frontendBaseUrl = frontendBaseUrl.endsWith("/")
-                ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1)
-                : frontendBaseUrl;
+        this.mailer = mailer;
+        // Trailing slash would produce "...app//reset-password" - harmless
+        // for routing but ugly in the email, so trim it once, up front.
+        this.frontendBaseUrl = trimTrailingSlash(frontendBaseUrl);
     }
 
     @Transactional
@@ -99,7 +85,8 @@ public class PasswordResetService {
                     .expiresAt(OffsetDateTime.now().plus(TOKEN_TTL))
                     .build();
             tokenRepository.save(token);
-            sendResetEmail(user, frontendBaseUrl + "/reset-password?token=" + rawToken);
+            String resetUrl = frontendBaseUrl + "/reset-password?token=" + rawToken;
+            mailer.send(user, resetUrl, TOKEN_TTL.toMinutes());
         }, () -> log.info("[PASSWORD-RESET] no account for '{}' — returning without action", normalized));
     }
 
@@ -131,38 +118,8 @@ public class PasswordResetService {
         log.info("[PASSWORD-RESET] password reset for user {}", user.getUserId());
     }
 
-    private void sendResetEmail(User user, String resetUrl) {
-        if (!mailEnabled) {
-            log.warn("[PASSWORD-RESET] spring.mail.host is not set — not sending email. "
-                    + "Reset link for {} (valid {} min): {}",
-                    user.getEmail(), TOKEN_TTL.toMinutes(), resetUrl);
-            return;
-        }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(mailFrom);
-        message.setTo(user.getEmail());
-        message.setSubject("Reset your SkillShare password");
-        message.setText("""
-                Hi %s,
-
-                We received a request to reset your SkillShare password. Open the link
-                below within %d minutes to choose a new one:
-
-                %s
-
-                If you didn't ask for this, you can safely ignore this email — your
-                password won't change.
-
-                — SkillShare
-                """.formatted(user.getFullName(), TOKEN_TTL.toMinutes(), resetUrl));
-        try {
-            mailSender.send(message);
-            log.info("[PASSWORD-RESET] reset email sent to {}", user.getEmail());
-        } catch (MailException e) {
-            // Swallow: surfacing "send failed" to the caller would reveal
-            // that this email is registered. Operators see it in the log.
-            log.error("[PASSWORD-RESET] failed to send reset email to {}: {}", user.getEmail(), e.getMessage());
-        }
+    private static String trimTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     private static String generateRawToken() {

@@ -41,6 +41,13 @@ spring:
           auth: true
           starttls:
             enable: true
+          # Belt-and-suspenders alongside PasswordResetMailer's @Async:
+          # JavaMailSender has no read/connect timeout by default, so a
+          # slow/unresponsive SMTP endpoint could otherwise tie up an
+          # async thread indefinitely instead of just failing loudly.
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
 
 # App-level settings (not Spring's own). frontend-base-url is the origin
 # the password-reset link points at - the deployed frontend in prod, the

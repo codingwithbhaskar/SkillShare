@@ -12,9 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mail.MailSendException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.nio.charset.StandardCharsets;
@@ -24,20 +21,23 @@ import java.util.HexFormat;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link PasswordResetService}. Repositories, the
- * {@link PasswordEncoder} and {@link JavaMailSender} are all mocked -
+ * {@link PasswordEncoder} and {@link PasswordResetMailer} are all mocked -
  * these exercise the service's own branching, the "never reveal whether
  * an email exists" contract, and the token hash/expiry/single-use rules.
+ * Email content is covered separately by {@link PasswordResetMailerTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class PasswordResetServiceTest {
@@ -45,7 +45,7 @@ class PasswordResetServiceTest {
     private UserRepository userRepository;
     private PasswordResetTokenRepository tokenRepository;
     private PasswordEncoder passwordEncoder;
-    private JavaMailSender mailSender;
+    private PasswordResetMailer mailer;
     private PasswordResetService service;
 
     @BeforeEach
@@ -53,14 +53,9 @@ class PasswordResetServiceTest {
         userRepository = Mockito.mock(UserRepository.class);
         tokenRepository = Mockito.mock(PasswordResetTokenRepository.class);
         passwordEncoder = Mockito.mock(PasswordEncoder.class);
-        mailSender = Mockito.mock(JavaMailSender.class);
-        service = newService("smtp.example.com");
-    }
-
-    private PasswordResetService newService(String mailHost) {
-        return new PasswordResetService(
-                userRepository, tokenRepository, passwordEncoder, mailSender,
-                mailHost, "SkillShare <no-reply@skillshare.local>", "https://app.example.com/");
+        mailer = Mockito.mock(PasswordResetMailer.class);
+        service = new PasswordResetService(
+                userRepository, tokenRepository, passwordEncoder, mailer, "https://app.example.com/");
     }
 
     private User user(long id, AccountStatus status) {
@@ -78,28 +73,29 @@ class PasswordResetServiceTest {
     // ---- requestReset ------------------------------------------------------
 
     @Test
-    void requestReset_unknownEmail_savesNothing_sendsNothing() {
+    void requestReset_unknownEmail_savesNothing_mailsNothing() {
         when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
 
         service.requestReset("nobody@example.com");
 
         verify(tokenRepository, never()).save(any());
-        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+        verify(mailer, never()).send(any(), any(), anyLong());
     }
 
     @Test
-    void requestReset_suspendedAccount_savesNothing_sendsNothing() {
+    void requestReset_suspendedAccount_savesNothing_mailsNothing() {
         when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.suspended)));
 
         service.requestReset("asha@example.com");
 
         verify(tokenRepository, never()).save(any());
-        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+        verify(mailer, never()).send(any(), any(), anyLong());
     }
 
     @Test
-    void requestReset_activeAccount_storesHashedToken_andEmailsPlaintextLink() throws Exception {
-        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.active)));
+    void requestReset_activeAccount_storesHashedToken_andAsksMailerToSendPlaintextLink() throws Exception {
+        User user = user(1L, AccountStatus.active);
+        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user));
 
         service.requestReset("  asha@example.com  "); // also checks trimming
 
@@ -107,43 +103,17 @@ class PasswordResetServiceTest {
         verify(tokenRepository).save(tokenCaptor.capture());
         PasswordResetToken saved = tokenCaptor.getValue();
 
-        ArgumentCaptor<SimpleMailMessage> mailCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(mailSender).send(mailCaptor.capture());
-        SimpleMailMessage mail = mailCaptor.getValue();
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mailer).send(eq(user), urlCaptor.capture(), eq(30L));
+        String resetUrl = urlCaptor.getValue();
 
-        String body = mail.getText();
-        assertNotNull(body);
-        int idx = body.indexOf("token=");
-        assertTrue(idx > 0, "email body should carry the reset link");
-        String rawToken = body.substring(idx + "token=".length()).split("\\s")[0];
+        assertTrue(resetUrl.startsWith("https://app.example.com/reset-password?token="));
+        String rawToken = resetUrl.substring(resetUrl.indexOf("token=") + "token=".length());
 
         // What's stored is the hash of what's emailed, never the raw token.
         assertEquals(sha256Hex(rawToken), saved.getTokenHash());
-        assertFalse(saved.getTokenHash().equals(rawToken));
+        assertNotEquals(saved.getTokenHash(), rawToken);
         assertTrue(saved.getExpiresAt().isAfter(OffsetDateTime.now().plusMinutes(25)));
-        assertEquals("asha@example.com", mail.getTo()[0]);
-        assertTrue(body.contains("https://app.example.com/reset-password?token="));
-    }
-
-    @Test
-    void requestReset_mailFailure_isSwallowed_tokenStillStored() {
-        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.active)));
-        Mockito.doThrow(new MailSendException("smtp down")).when(mailSender).send(any(SimpleMailMessage.class));
-
-        service.requestReset("asha@example.com"); // must not throw
-
-        verify(tokenRepository).save(any());
-    }
-
-    @Test
-    void requestReset_noSmtpConfigured_logsInsteadOfSending() {
-        service = newService(""); // spring.mail.host unset
-        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.active)));
-
-        service.requestReset("asha@example.com");
-
-        verify(tokenRepository).save(any());
-        verify(mailSender, never()).send(any(SimpleMailMessage.class));
     }
 
     // ---- resetPassword ---------------------------------------------------
