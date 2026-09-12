@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { changeMyPassword, deactivateMyAccount } from '../api/users.js'
 import { extractErrorMessage } from '../api/client.js'
 import { TrashIcon, UserIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 /** "My account" page - every role (customer/worker/admin) can edit their
  *  own name/phone and change their password here; worker-specific fields
@@ -14,6 +15,7 @@ import { TrashIcon, UserIcon } from '../components/icons.jsx'
  *  role = admin - locking the only/last admin out with no recovery
  *  path). */
 export default function AccountPage() {
+  useDocumentTitle('My Account')
   const { user, updateProfile, logout } = useAuth()
   const navigate = useNavigate()
 

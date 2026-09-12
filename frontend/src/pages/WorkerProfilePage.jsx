@@ -6,6 +6,7 @@ import { extractErrorMessage } from '../api/client.js'
 import AddressMapPicker from '../components/AddressMapPicker.jsx'
 import { Spinner } from '../components/Spinner.jsx'
 import { CheckCircleIcon, MapPinIcon, UserIcon, WrenchIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -25,6 +26,7 @@ function timeToInputValue(t) {
  * UpdateWorkerProfileRequest's backend javadoc for the same point.
  */
 export default function WorkerProfilePage() {
+  useDocumentTitle('My Worker Profile')
   const navigate = useNavigate()
 
   const [services, setServices] = useState([])

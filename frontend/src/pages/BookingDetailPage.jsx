@@ -15,6 +15,7 @@ import {
   CalendarIcon, CheckCircleIcon, ClockIcon, CreditCardIcon, ListIcon,
   MapPinIcon, NavigationIcon, PhoneIcon, StarIcon, UserIcon, XCircleIcon,
 } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const STATUS_BADGE = {
   pending: 'bg-secondary',
@@ -48,6 +49,7 @@ function StarPicker({ value, onChange }) {
 
 export default function BookingDetailPage() {
   const { bookingId } = useParams()
+  useDocumentTitle(`Booking #${bookingId}`)
   const { user } = useAuth()
 
   const [booking, setBooking] = useState(null)

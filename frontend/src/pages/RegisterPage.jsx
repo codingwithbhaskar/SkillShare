@@ -3,8 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { extractErrorMessage } from '../api/client.js'
 import { ArrowRightIcon, UserIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 export default function RegisterPage() {
+  useDocumentTitle('Sign up')
   const { register } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({

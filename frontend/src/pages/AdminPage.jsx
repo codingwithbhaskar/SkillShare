@@ -6,6 +6,7 @@ import { Spinner } from '../components/Spinner.jsx'
 import {
   BarChartIcon, CreditCardIcon, LayoutDashboardIcon, ListIcon, ShieldCheckIcon, UsersIcon, WrenchIcon,
 } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const STATUS_BADGE = {
   pending: 'bg-secondary',
@@ -24,6 +25,7 @@ const STATUS_LABEL = {
 }
 
 export default function AdminPage() {
+  useDocumentTitle('Admin Dashboard')
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 

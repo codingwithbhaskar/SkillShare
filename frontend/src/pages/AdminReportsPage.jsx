@@ -4,6 +4,7 @@ import { fetchAdminReport } from '../api/admin.js'
 import { extractErrorMessage } from '../api/client.js'
 import { Spinner } from '../components/Spinner.jsx'
 import { BarChartIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 function isoDateInput(date) {
   return date.toISOString().slice(0, 10)
@@ -13,6 +14,7 @@ const DEFAULT_TO = new Date()
 const DEFAULT_FROM = new Date(DEFAULT_TO.getTime() - 30 * 24 * 60 * 60 * 1000)
 
 export default function AdminReportsPage() {
+  useDocumentTitle('Reports')
   const [fromInput, setFromInput] = useState(isoDateInput(DEFAULT_FROM))
   const [toInput, setToInput] = useState(isoDateInput(DEFAULT_TO))
   const [report, setReport] = useState(null)

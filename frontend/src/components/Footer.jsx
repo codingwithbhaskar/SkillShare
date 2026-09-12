@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { MailIcon, PhoneIcon, WrenchIcon } from './icons.jsx'
+import { MailIcon, WrenchIcon } from './icons.jsx'
 
 export default function Footer() {
   const { isAuthenticated, user } = useAuth()
@@ -63,9 +63,6 @@ export default function Footer() {
               <li className="d-flex align-items-center gap-2">
                 <MailIcon width={15} height={15} /> support@skillshare.local
               </li>
-              <li className="d-flex align-items-center gap-2">
-                <PhoneIcon width={15} height={15} /> +91 00000 00000
-              </li>
             </ul>
           </div>
         </div>
@@ -74,10 +71,7 @@ export default function Footer() {
 
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
           <small className="footer-copyright mb-0">
-            &copy; {year} SkillShare. Built with Spring Boot &amp; PostgreSQL/PostGIS.
-          </small>
-          <small className="footer-copyright mb-0">
-            A database-systems course project.
+            &copy; {year} SkillShare. All rights reserved.
           </small>
         </div>
       </div>

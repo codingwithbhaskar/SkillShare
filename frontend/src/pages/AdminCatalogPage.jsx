@@ -7,11 +7,13 @@ import {
 import { extractErrorMessage } from '../api/client.js'
 import { Spinner } from '../components/Spinner.jsx'
 import { EditIcon, TrashIcon, WrenchIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const EMPTY_SERVICE_FORM = { serviceName: '', category: '', description: '' }
 const EMPTY_SKILL_FORM = { skillName: '', description: '' }
 
 export default function AdminCatalogPage() {
+  useDocumentTitle('Manage Catalog')
   const [tab, setTab] = useState('services')
 
   return (

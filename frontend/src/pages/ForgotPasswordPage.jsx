@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { requestPasswordReset } from '../api/auth.js'
 import { extractErrorMessage } from '../api/client.js'
 import { ArrowRightIcon, UserIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 export default function ForgotPasswordPage() {
+  useDocumentTitle('Reset password')
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [sent, setSent] = useState(false)

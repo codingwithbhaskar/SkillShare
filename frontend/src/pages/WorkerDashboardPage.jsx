@@ -6,6 +6,7 @@ import { Spinner } from '../components/Spinner.jsx'
 import {
   CalendarIcon, CheckCircleIcon, ClockIcon, LayoutDashboardIcon, StarIcon,
 } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const STATUS_BADGE = {
   pending: 'bg-secondary',
@@ -16,6 +17,7 @@ const STATUS_BADGE = {
 }
 
 export default function WorkerDashboardPage() {
+  useDocumentTitle('Worker Dashboard')
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
   const [bookings, setBookings] = useState([])

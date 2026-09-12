@@ -9,6 +9,7 @@ import { Spinner } from '../components/Spinner.jsx'
 import {
   CalendarIcon, ClockIcon, MapPinIcon, PlusCircleIcon, WrenchIcon,
 } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 // datetime-local gives "YYYY-MM-DDTHH:mm" with no timezone. This app's
 // seed data / live-test scripts all assume IST (+05:30) — see
@@ -20,6 +21,7 @@ function toIsoWithIst(datetimeLocalValue) {
 }
 
 export default function NewBookingPage() {
+  useDocumentTitle('Book a Service')
   const { user } = useAuth()
   const navigate = useNavigate()
 

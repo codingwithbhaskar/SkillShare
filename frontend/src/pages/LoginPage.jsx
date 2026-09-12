@@ -3,8 +3,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { extractErrorMessage } from '../api/client.js'
 import { ArrowRightIcon, UserIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 export default function LoginPage() {
+  useDocumentTitle('Log in')
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()

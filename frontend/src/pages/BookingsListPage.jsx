@@ -4,6 +4,7 @@ import { fetchMyBookings } from '../api/bookings.js'
 import { extractErrorMessage } from '../api/client.js'
 import { Spinner } from '../components/Spinner.jsx'
 import { CalendarIcon, ListIcon, MapPinIcon, PlusCircleIcon, UserIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const STATUS_BADGE = {
   pending: 'bg-secondary',
@@ -14,6 +15,7 @@ const STATUS_BADGE = {
 }
 
 export default function BookingsListPage() {
+  useDocumentTitle('My Bookings')
   const [bookings, setBookings] = useState(null)
   const [error, setError] = useState('')
 

@@ -17,10 +17,10 @@ const FEATURES = [
 ]
 
 const STATS = [
-  { value: 6, suffix: '', label: 'Ranking factors per match', decimals: 0 },
-  { value: 30, suffix: 'km', label: 'Live search radius', decimals: 0 },
-  { value: 100, suffix: '%', label: 'Double-bookings prevented at the DB level', decimals: 0 },
-  { value: 18, suffix: '', label: 'Connected data entities behind every booking', decimals: 0 },
+  { value: 100, suffix: '+', label: 'Services offered, across every trade', decimals: 0 },
+  { value: 30, suffix: 'km', label: 'Live search radius near you', decimals: 0 },
+  { value: 6, suffix: '', label: 'Factors matched — distance, rating, price & more', decimals: 0 },
+  { value: 100, suffix: '%', label: 'Slots protected from double-booking', decimals: 0 },
 ]
 
 const STEPS = [

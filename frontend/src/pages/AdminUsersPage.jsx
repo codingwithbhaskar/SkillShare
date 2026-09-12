@@ -4,6 +4,7 @@ import { fetchAdminUsers, updateUserStatus } from '../api/admin.js'
 import { extractErrorMessage } from '../api/client.js'
 import { Spinner } from '../components/Spinner.jsx'
 import { SearchIcon, UsersIcon } from '../components/icons.jsx'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
 
 const STATUS_BADGE = {
   active: 'bg-success',
@@ -18,6 +19,7 @@ const ROLE_BADGE = {
 }
 
 export default function AdminUsersPage() {
+  useDocumentTitle('Manage Users')
   const [users, setUsers] = useState(null)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
