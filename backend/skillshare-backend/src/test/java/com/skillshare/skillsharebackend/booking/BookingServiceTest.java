@@ -8,6 +8,7 @@ import com.skillshare.skillsharebackend.domain.Skill;
 import com.skillshare.skillsharebackend.domain.User;
 import com.skillshare.skillsharebackend.domain.enums.AccountStatus;
 import com.skillshare.skillsharebackend.domain.Worker;
+import com.skillshare.skillsharebackend.domain.WorkerStats;
 import com.skillshare.skillsharebackend.domain.enums.BookingStatus;
 import com.skillshare.skillsharebackend.domain.enums.BookingUrgency;
 import com.skillshare.skillsharebackend.domain.enums.UserRole;
@@ -18,6 +19,7 @@ import com.skillshare.skillsharebackend.repository.ServiceRepository;
 import com.skillshare.skillsharebackend.repository.SkillRepository;
 import com.skillshare.skillsharebackend.repository.ReviewRepository;
 import com.skillshare.skillsharebackend.repository.UserRepository;
+import com.skillshare.skillsharebackend.repository.WorkerStatsRepository;
 import com.skillshare.skillsharebackend.security.AuthenticatedUser;
 import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.stats.WorkerStatsRefreshService;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -69,13 +72,16 @@ class BookingServiceTest {
     private ReviewRepository reviewRepository;
     @Mock
     private WorkerStatsRefreshService workerStatsRefreshService;
+    @Mock
+    private WorkerStatsRepository workerStatsRepository;
 
     private BookingService service;
 
     @BeforeEach
     void setUp() {
         service = new BookingService(bookingRepository, bookingSkillRepository, locationRepository,
-                serviceRepository, skillRepository, userRepository, reviewRepository, workerStatsRefreshService);
+                serviceRepository, skillRepository, userRepository, reviewRepository, workerStatsRefreshService,
+                workerStatsRepository);
     }
 
     // BookingResponse.from() dereferences customer/service/location, so any
@@ -96,7 +102,13 @@ class BookingServiceTest {
                 .bookingId(4L)
                 .status(status)
                 .customer(User.builder().userId(1L).build())
-                .worker(Worker.builder().workerId(2L).user(User.builder().userId(workerUserId).build()).build())
+                .worker(Worker.builder()
+                        .workerId(2L)
+                        .user(User.builder().userId(workerUserId).fullName("Ravi Pawar").phone("9999999999").build())
+                        .bio("Experienced electrician")
+                        .experienceYears((short) 5)
+                        .baseHourlyRate(new BigDecimal("300.00"))
+                        .build())
                 .service(Service.builder().serviceId(2L).build())
                 .location(Location.builder().locationId(10L).build())
                 .build();
@@ -317,6 +329,51 @@ class BookingServiceTest {
         BookingResponse response = service.getBooking(4L, admin);
 
         assertEquals(4L, response.bookingId());
+    }
+
+    @Test
+    void getBooking_worker_isNull_whenNoWorkerAllocatedYet() {
+        Booking pending = fullBooking(BookingStatus.pending);
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(pending));
+
+        BookingResponse response = service.getBooking(4L);
+
+        assertNull(response.worker());
+        verifyNoInteractions(workerStatsRepository);
+    }
+
+    @Test
+    void getBooking_includesAssignedWorkerDetails_withRating() {
+        Booking confirmed = fullBookingWithWorker(BookingStatus.confirmed, 2L);
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(confirmed));
+        WorkerStats stats = new WorkerStats(2L, 12L, 10L, 1L, 8L, new BigDecimal("4.50"));
+        when(workerStatsRepository.findById(2L)).thenReturn(Optional.of(stats));
+
+        BookingResponse response = service.getBooking(4L);
+
+        assertEquals(2L, response.worker().workerId());
+        assertEquals("Ravi Pawar", response.worker().fullName());
+        assertEquals("9999999999", response.worker().phone());
+        assertEquals((short) 5, response.worker().experienceYears());
+        assertEquals(new BigDecimal("300.00"), response.worker().baseHourlyRate());
+        assertEquals(new BigDecimal("4.50"), response.worker().avgRating());
+        assertEquals(8L, response.worker().reviewCount());
+    }
+
+    @Test
+    void getBooking_includesAssignedWorkerDetails_evenWithNoStatsRowYet() {
+        // A worker with zero completed jobs has no mv_worker_stats row -
+        // the basic worker fields must still come through, with a null
+        // rating rather than a NullPointerException.
+        Booking confirmed = fullBookingWithWorker(BookingStatus.confirmed, 2L);
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(confirmed));
+        when(workerStatsRepository.findById(2L)).thenReturn(Optional.empty());
+
+        BookingResponse response = service.getBooking(4L);
+
+        assertEquals(2L, response.worker().workerId());
+        assertEquals("Ravi Pawar", response.worker().fullName());
+        assertNull(response.worker().avgRating());
     }
 
     @Test

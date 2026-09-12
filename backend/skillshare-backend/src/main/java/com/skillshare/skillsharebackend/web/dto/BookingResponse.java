@@ -42,7 +42,11 @@ public record BookingResponse(
         // guard caught it. Always false for a non-completed booking
         // (a review can't exist yet) - see BookingService's two
         // BookingResponse.from(...) call sites for how this is computed.
-        boolean reviewed) {
+        boolean reviewed,
+        // The assigned worker's own name/phone/bio/rate/rating - null
+        // until a worker is allocated. Added so the frontend can show WHO
+        // is actually coming to do the job, not just a bare workerId.
+        AssignedWorkerResponse worker) {
 
     /** For call sites where "reviewed" is always false by construction -
      *  a booking that's just been created, cancelled, or started can
@@ -56,7 +60,23 @@ public record BookingResponse(
         return from(booking, false);
     }
 
+    /** No {@code mv_worker_stats} lookup - see {@link
+     *  AssignedWorkerResponse#from(com.skillshare.skillsharebackend.domain.Worker)}'s
+     *  javadoc for why that's fine at this call site (every write-path
+     *  caller here has the frontend re-fetch via {@code GET
+     *  /api/bookings/{id}} right after anyway, which goes through the
+     *  full factory below instead). */
     public static BookingResponse from(Booking booking, boolean reviewed) {
+        return from(booking, reviewed,
+                booking.getWorker() != null ? AssignedWorkerResponse.from(booking.getWorker()) : null);
+    }
+
+    /** Full form, used by {@code BookingService.toResponseWithReviewFlag}
+     *  once it's looked up the assigned worker's {@code mv_worker_stats}
+     *  row (if any) - the only call site that needs an already-built
+     *  {@code worker} passed in rather than derived straight from the
+     *  booking. */
+    public static BookingResponse from(Booking booking, boolean reviewed, AssignedWorkerResponse worker) {
         return new BookingResponse(
                 booking.getBookingId(),
                 booking.getCustomer().getUserId(),
@@ -73,6 +93,7 @@ public record BookingResponse(
                 booking.getLocation().getCity(),
                 booking.getLocation().getLatitude(),
                 booking.getLocation().getLongitude(),
-                reviewed);
+                reviewed,
+                worker);
     }
 }

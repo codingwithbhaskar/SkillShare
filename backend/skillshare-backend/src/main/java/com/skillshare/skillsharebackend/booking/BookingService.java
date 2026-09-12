@@ -6,6 +6,7 @@ import com.skillshare.skillsharebackend.domain.BookingSkill;
 import com.skillshare.skillsharebackend.domain.Location;
 import com.skillshare.skillsharebackend.domain.Skill;
 import com.skillshare.skillsharebackend.domain.User;
+import com.skillshare.skillsharebackend.domain.WorkerStats;
 import com.skillshare.skillsharebackend.domain.enums.AccountStatus;
 import com.skillshare.skillsharebackend.domain.enums.BookingStatus;
 import com.skillshare.skillsharebackend.domain.enums.BookingUrgency;
@@ -18,9 +19,11 @@ import com.skillshare.skillsharebackend.repository.ReviewRepository;
 import com.skillshare.skillsharebackend.repository.ServiceRepository;
 import com.skillshare.skillsharebackend.repository.SkillRepository;
 import com.skillshare.skillsharebackend.repository.UserRepository;
+import com.skillshare.skillsharebackend.repository.WorkerStatsRepository;
 import com.skillshare.skillsharebackend.security.AuthenticatedUser;
 import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.stats.WorkerStatsRefreshService;
+import com.skillshare.skillsharebackend.web.dto.AssignedWorkerResponse;
 import com.skillshare.skillsharebackend.web.dto.BookingResponse;
 import com.skillshare.skillsharebackend.web.dto.CreateBookingRequest;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +78,7 @@ public class BookingService {
     private final UserRepository userRepository;
     private final ReviewRepository reviewRepository;
     private final WorkerStatsRefreshService workerStatsRefreshService;
+    private final WorkerStatsRepository workerStatsRepository;
 
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request) {
@@ -277,7 +281,17 @@ public class BookingService {
     private BookingResponse toResponseWithReviewFlag(Booking booking) {
         boolean reviewed = booking.getStatus() == BookingStatus.completed
                 && reviewRepository.existsByBooking_BookingId(booking.getBookingId());
-        return BookingResponse.from(booking, reviewed);
+        // Enriched with mv_worker_stats (rating), unlike the plain
+        // BookingResponse.from(booking, reviewed) the write-path methods
+        // use - this is the path GET /api/bookings/{id} and the list
+        // endpoint both go through, i.e. everything the frontend actually
+        // renders long-term (every action reloads via one of these two).
+        AssignedWorkerResponse worker = null;
+        if (booking.getWorker() != null) {
+            WorkerStats stats = workerStatsRepository.findById(booking.getWorker().getWorkerId()).orElse(null);
+            worker = AssignedWorkerResponse.from(booking.getWorker(), stats);
+        }
+        return BookingResponse.from(booking, reviewed, worker);
     }
 
     private void requireCustomerOrAdmin(Booking booking, AuthenticatedUser caller) {

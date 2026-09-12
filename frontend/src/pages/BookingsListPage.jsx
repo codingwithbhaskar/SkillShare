@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { fetchMyBookings } from '../api/bookings.js'
 import { extractErrorMessage } from '../api/client.js'
 import { Spinner } from '../components/Spinner.jsx'
-import { CalendarIcon, ListIcon, MapPinIcon, PlusCircleIcon } from '../components/icons.jsx'
+import { CalendarIcon, ListIcon, MapPinIcon, PlusCircleIcon, UserIcon } from '../components/icons.jsx'
 
 const STATUS_BADGE = {
   pending: 'bg-secondary',
@@ -69,6 +69,11 @@ export default function BookingsListPage() {
                   <CalendarIcon width={14} height={14} />
                   {new Date(b.scheduledStart).toLocaleString()} – {new Date(b.scheduledEnd).toLocaleTimeString()}
                 </div>
+                {b.worker && (
+                  <div className="text-muted small d-flex align-items-center gap-1">
+                    <UserIcon width={14} height={14} /> {b.worker.fullName}
+                  </div>
+                )}
               </div>
               <span className={`badge ${STATUS_BADGE[b.status] || 'bg-secondary'} text-uppercase`}>
                 {b.status.replace('_', ' ')}

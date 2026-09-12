@@ -13,7 +13,7 @@ import RouteMap from '../components/RouteMap.jsx'
 import { Spinner } from '../components/Spinner.jsx'
 import {
   CalendarIcon, CheckCircleIcon, ClockIcon, CreditCardIcon, ListIcon,
-  MapPinIcon, NavigationIcon, StarIcon, UserIcon, XCircleIcon,
+  MapPinIcon, NavigationIcon, PhoneIcon, StarIcon, UserIcon, XCircleIcon,
 } from '../components/icons.jsx'
 
 const STATUS_BADGE = {
@@ -252,7 +252,7 @@ export default function BookingDetailPage() {
           <dd className="col-sm-8">{booking.addressLine}, {booking.city}</dd>
 
           <dt className="col-sm-4 d-flex align-items-center gap-2"><UserIcon width={18} height={18} /> Worker assigned</dt>
-          <dd className="col-sm-8">{booking.workerId ? `Worker #${booking.workerId}` : 'Not yet allocated'}</dd>
+          <dd className="col-sm-8">{booking.worker ? booking.worker.fullName : 'Not yet allocated'}</dd>
 
           <dt className="col-sm-4 d-flex align-items-center gap-2"><CreditCardIcon width={18} height={18} /> Total amount</dt>
           <dd className="col-sm-8">{booking.totalAmount != null ? `₹${booking.totalAmount}` : '—'}</dd>
@@ -274,6 +274,39 @@ export default function BookingDetailPage() {
           )}
         </dl>
       </div>
+
+      {isCustomerViewer && booking.worker && (
+        <div className="card p-4 mb-3 fade-in-up">
+          <h2 className="h6 d-flex align-items-center gap-2 mb-3"><UserIcon width={18} height={18} /> Your worker</h2>
+          <div className="d-flex align-items-start gap-3">
+            <div className="feature-icon"><UserIcon width={22} height={22} /></div>
+            <div>
+              <div className="fw-semibold">{booking.worker.fullName}</div>
+              {booking.worker.avgRating != null && (
+                <div className="text-muted small d-flex align-items-center gap-1">
+                  <StarIcon width={14} height={14} style={{ fill: 'currentColor' }} />
+                  {Number(booking.worker.avgRating).toFixed(1)}
+                  {' '}({booking.worker.reviewCount} review{booking.worker.reviewCount === 1 ? '' : 's'})
+                </div>
+              )}
+              {booking.worker.experienceYears != null && (
+                <div className="text-muted small">
+                  {booking.worker.experienceYears} year{booking.worker.experienceYears === 1 ? '' : 's'} of experience
+                </div>
+              )}
+              {booking.worker.baseHourlyRate != null && (
+                <div className="text-muted small">₹{booking.worker.baseHourlyRate}/hr base rate</div>
+              )}
+              {booking.worker.phone && (
+                <div className="text-muted small d-flex align-items-center gap-1 mt-1">
+                  <PhoneIcon width={14} height={14} /> {booking.worker.phone}
+                </div>
+              )}
+              {booking.worker.bio && <p className="small mt-2 mb-0">{booking.worker.bio}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="d-flex flex-wrap gap-2 mb-4 fade-in-up">
         {isCustomerViewer && booking.status === 'pending' && (
