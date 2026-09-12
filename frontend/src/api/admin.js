@@ -15,11 +15,6 @@ export async function updateUserStatus(userId, status) {
   return data
 }
 
-export async function fetchAdminBookings(status) {
-  const { data } = await apiClient.get('/admin/bookings', { params: { status } })
-  return data
-}
-
 export async function fetchAdminServices() {
   const { data } = await apiClient.get('/admin/services')
   return data
