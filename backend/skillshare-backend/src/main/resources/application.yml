@@ -42,3 +42,17 @@ management:
     web:
       exposure:
         include: health,info
+  health:
+    # Actuator auto-registers a MailHealthIndicator the moment a
+    # JavaMailSender bean exists (spring-boot-starter-mail is now always
+    # on the classpath, for password-reset emails) - it actively tries to
+    # connect to spring.mail.host as part of every /actuator/health call.
+    # With MAIL_HOST unset (the default - see the mail block above) that
+    # connection always fails, which drags the WHOLE health endpoint down
+    # to 503 even though the app itself is perfectly healthy - and a
+    # hosting platform's health check (e.g. Render's) then never sees a
+    # 200 and kills the deploy as "unhealthy". Confirmed live 2026-09-12.
+    # Mail delivery being unconfigured/down is not a reason to report the
+    # app itself as down, so this indicator is disabled outright.
+    mail:
+      enabled: false
