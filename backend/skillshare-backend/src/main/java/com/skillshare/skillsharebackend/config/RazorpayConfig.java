@@ -26,6 +26,10 @@ public class RazorpayConfig {
     public RazorpayClient razorpayClient(
             @Value("${razorpay.key-id:}") String keyId,
             @Value("${razorpay.key-secret:}") String keySecret) throws RazorpayException {
-        return new RazorpayClient(keyId, keySecret);
+        // .strip() - see PaymentService's constructor comment: a stray
+        // trailing space/newline pasted into a hosting dashboard's env
+        // var field is invisible in a masked field and breaks HMAC-based
+        // auth/signing silently.
+        return new RazorpayClient(keyId.strip(), keySecret.strip());
     }
 }

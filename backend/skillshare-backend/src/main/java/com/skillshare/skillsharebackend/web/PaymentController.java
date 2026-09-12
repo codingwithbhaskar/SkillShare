@@ -14,9 +14,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StreamUtils;
 
 import java.io.IOException;
-import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Phase 6 - Razorpay payment HTTP surface, wrapping {@link PaymentService}.
@@ -59,15 +60,21 @@ public class PaymentController {
      * which fails for an actual JSON object and would in any case risk
      * not preserving the exact bytes Razorpay signed. Signature
      * verification needs the untouched raw body.
+     *
+     * <p>Reads the raw input stream via {@link StreamUtils} rather than
+     * {@code request.getReader().lines()...joining(...)} (the original
+     * approach here) - that discarded every line terminator and rejoined
+     * with {@code System.lineSeparator()}, the SERVER's platform line
+     * separator, which is never guaranteed to match whatever line endings
+     * (if any) were actually in the bytes Razorpay hashed. A single-line,
+     * compact JSON body (Razorpay's normal case) happened not to trigger
+     * it, which is why this went unnoticed until now.
      */
     @PostMapping("/webhook")
     public ResponseEntity<String> webhook(
             HttpServletRequest request,
             @RequestHeader("X-Razorpay-Signature") String signature) throws IOException {
-        String rawBody;
-        try (var reader = request.getReader()) {
-            rawBody = reader.lines().collect(Collectors.joining(System.lineSeparator()));
-        }
+        String rawBody = StreamUtils.copyToString(request.getInputStream(), StandardCharsets.UTF_8);
         paymentService.handleWebhook(rawBody, signature);
         return ResponseEntity.ok("ok");
     }

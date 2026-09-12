@@ -83,9 +83,15 @@ public class PaymentService {
         this.bookingRepository = bookingRepository;
         this.paymentRepository = paymentRepository;
         this.razorpayClient = razorpayClient;
-        this.keyId = keyId;
-        this.keySecret = keySecret;
-        this.webhookSecret = webhookSecret;
+        // .strip() every credential - a stray trailing space/newline from
+        // pasting into a hosting dashboard's env var field (confirmed
+        // live 2026-09-12: this silently broke webhook signature
+        // verification, since the HMAC is computed over the exact secret
+        // bytes) would otherwise be undetectable from the masked value
+        // shown in that dashboard.
+        this.keyId = keyId.strip();
+        this.keySecret = keySecret.strip();
+        this.webhookSecret = webhookSecret.strip();
     }
 
     @Transactional
