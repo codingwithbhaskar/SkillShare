@@ -7,6 +7,18 @@ import { MapPinIcon, NavigationIcon } from './icons.jsx'
 // live-test scripts, so a fresh booking form starts somewhere sensible).
 const DEFAULT_CENTER = [19.9975, 73.7898]
 
+// LocationIQ (built on the same Nominatim data, so the response shape
+// below - lat/lon as strings - didn't need to change) replaces calling
+// nominatim.openstreetmap.org directly from the browser: Nominatim's own
+// usage policy caps this at 1 request/second and expects self-hosting or
+// a paid provider for anything beyond light, personal use - a live
+// public site doing its own address search against it risks getting
+// throttled. With VITE_LOCATIONIQ_API_KEY unset, this falls back to the
+// direct Nominatim call (same graceful-degradation stance as every other
+// optional integration in this project - search still works locally
+// during dev, just without the dedicated key).
+const LOCATIONIQ_API_KEY = import.meta.env.VITE_LOCATIONIQ_API_KEY
+
 function ClickToPlacePin({ onPick }) {
   useMapEvents({
     click(e) {
@@ -35,7 +47,9 @@ export default function AddressMapPicker({ value, onChange }) {
     setSearching(true)
     setSearchError('')
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(searchText)}`
+      const url = LOCATIONIQ_API_KEY
+        ? `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_API_KEY}&format=json&limit=1&q=${encodeURIComponent(searchText)}`
+        : `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(searchText)}`
       const res = await fetch(url)
       if (!res.ok) throw new Error('Geocoding service unavailable')
       const results = await res.json()

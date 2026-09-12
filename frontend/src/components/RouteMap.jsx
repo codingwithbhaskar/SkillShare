@@ -1,10 +1,20 @@
-import { useEffect, useRef } from 'react'
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import 'leaflet-routing-machine'
-import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
 import '../lib/leafletIconFix.js'
 import { MapPinIcon } from './icons.jsx'
+
+// Real hosted routing API (free tier: 2,000 requests/day, no card) -
+// replaces leaflet-routing-machine's default router.project-osrm.org,
+// OSRM's own public DEMO server which their docs explicitly say isn't
+// for production use and which was the actual cause of "the map doesn't
+// work" reports: no uptime guarantee, gets rate-limited under real
+// traffic, and fails silently (no route line, no distance/time, no error
+// shown). With VITE_ORS_API_KEY unset, this degrades the same way every
+// other optional integration in this project does: no route line, no
+// crash - see AddressMapPicker.jsx's LocationIQ fallback for the same
+// pattern on the geocoding side.
+const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY
 
 // A small colored-dot marker (no emoji, per the design-system checklist)
 // to visually tell "you" (the worker's live position) apart from the
@@ -16,46 +26,72 @@ const workerDivIcon = L.divIcon({
   iconAnchor: [8, 8],
 })
 
-function RouteLine({ from, to, onRouteFound }) {
+/** Fits the map to the drawn route once it's known - replaces leaflet-
+ *  routing-machine's built-in fitSelectedRoutes option, which doesn't
+ *  exist now that routing is a plain fetch + Polyline. */
+function FitToRoute({ positions }) {
   const map = useMap()
+  useEffect(() => {
+    if (positions && positions.length > 1) {
+      map.fitBounds(L.latLngBounds(positions), { padding: [24, 24] })
+    }
+  }, [map, positions])
+  return null
+}
+
+function RouteLine({ from, to, onRouteFound }) {
+  const [positions, setPositions] = useState(null)
   const onRouteFoundRef = useRef(onRouteFound)
   onRouteFoundRef.current = onRouteFound
 
   useEffect(() => {
+    setPositions(null)
     if (!from || !to) return undefined
 
-    const control = L.Routing.control({
-      waypoints: [L.latLng(from.lat, from.lon), L.latLng(to.lat, to.lon)],
-      router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-      addWaypoints: false,
-      draggableWaypoints: false,
-      fitSelectedRoutes: true,
-      show: false,
-      createMarker: () => null, // markers are rendered separately as <Marker>
-      lineOptions: { styles: [{ color: '#EA580C', weight: 5, opacity: 0.85 }] },
-    })
-
-    control.on('routesfound', (e) => {
-      const summary = e.routes?.[0]?.summary
-      if (summary && onRouteFoundRef.current) {
-        onRouteFoundRef.current({
-          distanceKm: summary.totalDistance / 1000,
-          durationMin: summary.totalTime / 60,
-        })
-      }
-    })
-
-    control.on('routingerror', () => {
-      if (onRouteFoundRef.current) onRouteFoundRef.current(null)
-    })
-
-    control.addTo(map)
-    return () => {
-      map.removeControl(control)
+    if (!ORS_API_KEY) {
+      onRouteFoundRef.current?.(null)
+      return undefined
     }
-  }, [map, from?.lat, from?.lon, to?.lat, to?.lon])
 
-  return null
+    let cancelled = false
+    fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: ORS_API_KEY },
+      body: JSON.stringify({ coordinates: [[from.lon, from.lat], [to.lon, to.lat]] }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('routing request failed')
+        return res.json()
+      })
+      .then((geojson) => {
+        if (cancelled) return
+        const feature = geojson.features?.[0]
+        if (!feature) throw new Error('no route returned')
+        // GeoJSON is [lon, lat]; Leaflet wants [lat, lon].
+        setPositions(feature.geometry.coordinates.map(([lon, lat]) => [lat, lon]))
+        const summary = feature.properties?.summary
+        if (summary) {
+          onRouteFoundRef.current?.({
+            distanceKm: summary.distance / 1000,
+            durationMin: summary.duration / 60,
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) onRouteFoundRef.current?.(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [from?.lat, from?.lon, to?.lat, to?.lon])
+
+  if (!positions) return null
+  return (
+    <>
+      <Polyline positions={positions} pathOptions={{ color: '#EA580C', weight: 5, opacity: 0.85 }} />
+      <FitToRoute positions={positions} />
+    </>
+  )
 }
 
 /**
