@@ -192,7 +192,10 @@ public class AuthService {
 
     private void validateRegistration(RegisterRequest request) {
         if (request.role() == null) {
-            throw new AuthValidationException("role is required (admin, customer, or worker)");
+            throw new AuthValidationException("role is required (customer or worker)");
+        }
+        if (request.role() == UserRole.admin) {
+            throw new AuthValidationException("Admin accounts can't be self-registered");
         }
         if (request.fullName() == null || request.fullName().isBlank()) {
             throw new AuthValidationException("fullName is required");

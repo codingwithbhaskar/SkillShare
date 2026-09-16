@@ -129,6 +129,14 @@ class AuthServiceTest {
     }
 
     @Test
+    void register_rejectsAdminRole() {
+        RegisterRequest request = new RegisterRequest(UserRole.admin, "Asha", "asha@example.com", null, "password123");
+
+        assertThrows(AuthValidationException.class, () -> service.register(request));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void register_rejectsBlankFullName() {
         RegisterRequest request = new RegisterRequest(UserRole.customer, "  ", "asha@example.com", null, "password123");
         assertThrows(AuthValidationException.class, () -> service.register(request));
