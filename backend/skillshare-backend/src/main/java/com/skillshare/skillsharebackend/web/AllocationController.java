@@ -40,8 +40,9 @@ public class AllocationController {
      * error (see {@code WorkerNotFoundException}'s javadoc).
      */
     @GetMapping("/bookings/{bookingId}/candidates/{workerId}/score")
-    public CandidateScoreResponse scoreCandidate(@PathVariable Long bookingId, @PathVariable Long workerId) {
-        return allocationScoringService.scoreCandidate(bookingId, workerId);
+    public CandidateScoreResponse scoreCandidate(
+            @PathVariable Long bookingId, @PathVariable Long workerId, Authentication authentication) {
+        return allocationScoringService.scoreCandidate(bookingId, workerId, AuthenticatedUser.from(authentication));
     }
 
     /**
@@ -52,8 +53,8 @@ public class AllocationController {
      * {@code GET /api/allocation/bookings/4/candidates/scores}.
      */
     @GetMapping("/bookings/{bookingId}/candidates/scores")
-    public List<CandidateScoreResponse> scoreAllCandidates(@PathVariable Long bookingId) {
-        return allocationScoringService.scoreAllCandidates(bookingId);
+    public List<CandidateScoreResponse> scoreAllCandidates(@PathVariable Long bookingId, Authentication authentication) {
+        return allocationScoringService.scoreAllCandidates(bookingId, AuthenticatedUser.from(authentication));
     }
 
     /**

@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +91,29 @@ class PasswordResetServiceTest {
 
         verify(tokenRepository, never()).save(any());
         verify(mailer, never()).send(any(), any(), anyLong());
+    }
+
+    @Test
+    void requestReset_secondCallForSameEmailWithinWindow_isRateLimited() {
+        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.active)));
+
+        service.requestReset("asha@example.com");
+        service.requestReset("asha@example.com"); // immediate repeat - same email
+
+        // Only the first call's token/email should have gone through.
+        verify(tokenRepository, times(1)).save(any());
+        verify(mailer, times(1)).send(any(), any(), anyLong());
+    }
+
+    @Test
+    void requestReset_rateLimitIsPerEmail_doesNotBlockADifferentAddress() {
+        when(userRepository.findByEmail("asha@example.com")).thenReturn(Optional.of(user(1L, AccountStatus.active)));
+        when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(user(2L, AccountStatus.active)));
+
+        service.requestReset("asha@example.com");
+        service.requestReset("other@example.com");
+
+        verify(tokenRepository, times(2)).save(any());
     }
 
     @Test

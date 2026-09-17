@@ -1,8 +1,12 @@
 package com.skillshare.skillsharebackend.allocation;
 
+import com.skillshare.skillsharebackend.domain.Booking;
+import com.skillshare.skillsharebackend.domain.User;
 import com.skillshare.skillsharebackend.repository.AllocationScoreProjection;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CandidateScoreResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -102,6 +107,76 @@ class AllocationScoringServiceTest {
         when(bookingRepository.existsById(999L)).thenReturn(false);
 
         assertThrows(BookingNotFoundException.class, () -> service.scoreAllCandidates(999L));
+    }
+
+    private Booking bookingOwnedBy(Long customerId) {
+        return Booking.builder().bookingId(4L).customer(User.builder().userId(customerId).build()).build();
+    }
+
+    // ---- ownership-checked overloads ------------------------------------
+
+    @Test
+    void scoreCandidate_withCaller_succeeds_forOwningCustomer() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        when(bookingRepository.existsById(4L)).thenReturn(true);
+        when(workerRepository.existsById(1L)).thenReturn(true);
+        AllocationScoreProjection projection = scoreOf("0.5", "0.6", "0.8", "1.0", "0.3", "0.7", "0.6446");
+        when(workerRepository.scoreCandidate(4L, 1L)).thenReturn(projection);
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        CandidateScoreResponse result = service.scoreCandidate(4L, 1L, owner);
+
+        assertEquals(1L, result.workerId());
+    }
+
+    @Test
+    void scoreCandidate_withCaller_succeeds_forAdmin() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        when(bookingRepository.existsById(4L)).thenReturn(true);
+        when(workerRepository.existsById(1L)).thenReturn(true);
+        AllocationScoreProjection projection = scoreOf("0.5", "0.6", "0.8", "1.0", "0.3", "0.7", "0.6446");
+        when(workerRepository.scoreCandidate(4L, 1L)).thenReturn(projection);
+        AuthenticatedUser admin = new AuthenticatedUser(42L, "admin");
+
+        CandidateScoreResponse result = service.scoreCandidate(4L, 1L, admin);
+
+        assertEquals(1L, result.workerId());
+    }
+
+    @Test
+    void scoreCandidate_withCaller_throwsForbidden_whenNotOwnerOrAdmin() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "customer");
+
+        assertThrows(ForbiddenException.class, () -> service.scoreCandidate(4L, 1L, stranger));
+    }
+
+    @Test
+    void scoreCandidate_withCaller_throwsBookingNotFound_forUnknownBooking() {
+        when(bookingRepository.findById(999L)).thenReturn(Optional.empty());
+        AuthenticatedUser someone = new AuthenticatedUser(1L, "customer");
+
+        assertThrows(BookingNotFoundException.class, () -> service.scoreCandidate(999L, 1L, someone));
+    }
+
+    @Test
+    void scoreAllCandidates_withCaller_succeeds_forOwningCustomer() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        when(bookingRepository.existsById(4L)).thenReturn(true);
+        when(workerRepository.findCandidateWorkerIds(4L)).thenReturn(List.of());
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        List<CandidateScoreResponse> result = service.scoreAllCandidates(4L, owner);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void scoreAllCandidates_withCaller_throwsForbidden_whenNotOwnerOrAdmin() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "worker");
+
+        assertThrows(ForbiddenException.class, () -> service.scoreAllCandidates(4L, stranger));
     }
 
     private AllocationScoreProjection scoreOf(String skill, String rating, String distance,

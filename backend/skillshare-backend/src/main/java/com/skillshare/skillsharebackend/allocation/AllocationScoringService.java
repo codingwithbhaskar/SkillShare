@@ -1,8 +1,11 @@
 package com.skillshare.skillsharebackend.allocation;
 
+import com.skillshare.skillsharebackend.domain.Booking;
 import com.skillshare.skillsharebackend.repository.AllocationScoreProjection;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CandidateScoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -49,6 +52,20 @@ public class AllocationScoringService {
         return toResponse(workerId, workerRepository.scoreCandidate(bookingId, workerId));
     }
 
+    /** Ownership-checked overload {@code AllocationController} calls -
+     *  only the booking's own customer (or an admin) may see a
+     *  candidate's score, same convention as {@code
+     *  AllocationService#allocate(Long, AuthenticatedUser)}. Closes a
+     *  real gap: this and {@link #scoreAllCandidates(Long, AuthenticatedUser)}
+     *  had no ownership check at all before this - any authenticated
+     *  user, including an unrelated customer or an uninvolved worker,
+     *  could view another customer's candidate list, including every
+     *  other worker's individual rating/distance/price/experience scores. */
+    public CandidateScoreResponse scoreCandidate(Long bookingId, Long workerId, AuthenticatedUser caller) {
+        requireCustomerOrAdmin(bookingId, caller);
+        return scoreCandidate(bookingId, workerId);
+    }
+
     /**
      * Scores every hard-filtered candidate for a booking (the same set
      * fn_find_candidates/sp_allocate_worker itself considers), sorted
@@ -64,6 +81,21 @@ public class AllocationScoringService {
                 .map(workerId -> toResponse(workerId, workerRepository.scoreCandidate(bookingId, workerId)))
                 .sorted(Comparator.comparing(CandidateScoreResponse::totalScore).reversed())
                 .toList();
+    }
+
+    /** Ownership-checked overload - see {@link #scoreCandidate(Long, Long, AuthenticatedUser)}. */
+    public List<CandidateScoreResponse> scoreAllCandidates(Long bookingId, AuthenticatedUser caller) {
+        requireCustomerOrAdmin(bookingId, caller);
+        return scoreAllCandidates(bookingId);
+    }
+
+    private void requireCustomerOrAdmin(Long bookingId, AuthenticatedUser caller) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        boolean isOwner = booking.getCustomer().getUserId().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            throw new ForbiddenException("You do not have access to booking " + bookingId);
+        }
     }
 
     private CandidateScoreResponse toResponse(Long workerId, AllocationScoreProjection p) {

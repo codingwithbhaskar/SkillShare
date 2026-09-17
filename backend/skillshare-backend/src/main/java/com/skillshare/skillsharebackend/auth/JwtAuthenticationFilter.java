@@ -1,5 +1,7 @@
 package com.skillshare.skillsharebackend.auth;
 
+import com.skillshare.skillsharebackend.domain.enums.AccountStatus;
+import com.skillshare.skillsharebackend.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -40,6 +42,23 @@ import java.util.Optional;
  * rejected outright here - {@code SecurityConfig}'s
  * {@code authorizeHttpRequests} rules are what actually turn "not
  * authenticated" into a 401/403 for protected routes.
+ *
+ * <p><b>Current status is re-checked on every request</b> (added
+ * alongside {@code UserRole.admin} self-registration being blocked) -
+ * a cryptographically valid, unexpired token alone is deliberately NOT
+ * sufficient. Before this, an admin suspending or deactivating a user
+ * had zero effect until that user's existing token naturally expired -
+ * up to {@code jwt.expiration-ms} (24h) later, since nothing downstream
+ * of "is this JWT valid" ever looked the user back up. A user whose
+ * account is no longer {@link AccountStatus#active} (or that no longer
+ * exists at all) is now treated exactly like an invalid/expired token -
+ * not authenticated - so suspension/deactivation takes effect on their
+ * very next request, same as this project's other "the DB is the source
+ * of truth" principles. This does re-add the one DB round-trip per
+ * authenticated request that this class's own javadoc used to
+ * deliberately avoid; that trade-off is the correct one - a stale
+ * "still logged in" for a blocked account is a real security gap, not
+ * just a staleness inconvenience.
  */
 @Component
 @RequiredArgsConstructor
@@ -48,6 +67,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(
@@ -70,10 +90,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // authentication never having been set for that request.
             if (claims.isPresent()) {
                 String userId = claims.get().getSubject();
-                String role = claims.get().get("role", String.class);
-                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()));
-                var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                boolean stillActive = userRepository.findById(Long.valueOf(userId))
+                        .map(user -> user.getStatus() == AccountStatus.active)
+                        .orElse(false);
+                if (stillActive) {
+                    String role = claims.get().get("role", String.class);
+                    var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()));
+                    var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         }
         filterChain.doFilter(request, response);
