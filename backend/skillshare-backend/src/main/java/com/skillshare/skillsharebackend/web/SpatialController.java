@@ -1,11 +1,13 @@
 package com.skillshare.skillsharebackend.web;
 
 import com.skillshare.skillsharebackend.allocation.SpatialSearchService;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
 import com.skillshare.skillsharebackend.web.dto.CandidateWorkerResponse;
 import com.skillshare.skillsharebackend.web.dto.NearbyWorkerResponse;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -58,7 +60,8 @@ public class SpatialController {
      * {@code GET /api/spatial/bookings/4/candidates}.
      */
     @GetMapping("/bookings/{bookingId}/candidates")
-    public List<CandidateWorkerResponse> candidatesForBooking(@PathVariable Long bookingId) {
-        return spatialSearchService.findCandidatesForBooking(bookingId);
+    public List<CandidateWorkerResponse> candidatesForBooking(
+            @PathVariable Long bookingId, Authentication authentication) {
+        return spatialSearchService.findCandidatesForBooking(bookingId, AuthenticatedUser.from(authentication));
     }
 }

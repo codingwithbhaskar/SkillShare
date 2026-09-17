@@ -20,11 +20,16 @@ import com.skillshare.skillsharebackend.payment.PaymentNotAllowedException;
 import com.skillshare.skillsharebackend.payment.PaymentValidationException;
 import com.skillshare.skillsharebackend.payment.PaymentVerificationException;
 import com.skillshare.skillsharebackend.security.ForbiddenException;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.util.stream.Collectors;
 
 /**
  * Centralizes exception -&gt; HTTP status mapping for the whole REST
@@ -137,6 +142,44 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AdminValidationException.class)
     public ResponseEntity<String> handleAdminValidation(AdminValidationException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+    }
+
+    /**
+     * {@code @RequestParam}-level constraint annotations (e.g.
+     * {@code SpatialController.nearbyWorkers}'s {@code @DecimalMin("-90")
+     * @DecimalMax("90")} on {@code lat}) are enforced by bean validation
+     * on the method parameters themselves, not a {@code @Valid @RequestBody}
+     * DTO - a violation there throws this, not {@code
+     * MethodArgumentNotValidException}. Left unmapped, it fell through to
+     * Spring's default handling as a bare 500 - confirmed live: {@code
+     * GET /api/spatial/workers/nearby?lat=200&lon=73.85} returned 500,
+     * not a 400 telling the caller what was actually wrong with their
+     * request.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<String> handleConstraintViolation(ConstraintViolationException ex) {
+        String message = ex.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + " " + violation.getMessage())
+                .collect(Collectors.joining("; "));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(message.isBlank() ? "Invalid request parameters" : message);
+    }
+
+    /** A query/path parameter that doesn't convert to its declared type
+     *  (e.g. {@code lat=abc} where a {@code BigDecimal} is expected) -
+     *  same "was a bare 500 before this" reasoning as {@link
+     *  #handleConstraintViolation}. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<String> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body("\"" + ex.getName() + "\" has an invalid value");
+    }
+
+    /** A required {@code @RequestParam} missing entirely (e.g. no {@code
+     *  lat} at all) - same reasoning as {@link #handleConstraintViolation}. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<String> handleMissingParameter(MissingServletRequestParameterException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 

@@ -6,10 +6,13 @@ import com.skillshare.skillsharebackend.allocation.BookingNotFoundException;
 import com.skillshare.skillsharebackend.domain.Booking;
 import com.skillshare.skillsharebackend.domain.Payment;
 import com.skillshare.skillsharebackend.domain.User;
+import com.skillshare.skillsharebackend.domain.Worker;
 import com.skillshare.skillsharebackend.domain.enums.BookingStatus;
 import com.skillshare.skillsharebackend.domain.enums.PaymentStatus;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.PaymentRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CreateOrderResponse;
 import com.skillshare.skillsharebackend.web.dto.PaymentResponse;
 import com.skillshare.skillsharebackend.web.dto.VerifyPaymentRequest;
@@ -68,6 +71,58 @@ class PaymentServiceTest {
                 .totalAmount(totalAmount)
                 .customer(User.builder().userId(1L).build())
                 .build();
+    }
+
+    private Booking bookingWithWorker(BookingStatus status, BigDecimal totalAmount, Long workerUserId) {
+        return Booking.builder()
+                .bookingId(4L)
+                .status(status)
+                .totalAmount(totalAmount)
+                .customer(User.builder().userId(1L).build())
+                .worker(Worker.builder().workerId(2L).user(User.builder().userId(workerUserId).build()).build())
+                .build();
+    }
+
+    // ---- createOrder(bookingId, caller) - ownership -------------------
+
+    @Test
+    void createOrder_withCaller_throwsForbidden_whenNotOwnerOrAdmin() {
+        when(bookingRepository.findById(4L))
+                .thenReturn(Optional.of(bookingWith(BookingStatus.confirmed, new BigDecimal("500.00"))));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "customer");
+
+        assertThrows(ForbiddenException.class, () -> service.createOrder(4L, stranger));
+        verifyNoInteractions(razorpayClient);
+    }
+
+    @Test
+    void createOrder_withCaller_succeeds_forOwningCustomer() {
+        Booking booking = bookingWith(BookingStatus.confirmed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment existing = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.pending).gatewayOrderId("order_existing123").build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(existing));
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        CreateOrderResponse response = service.createOrder(4L, owner);
+
+        assertEquals("order_existing123", response.razorpayOrderId());
+    }
+
+    @Test
+    void createOrder_withCaller_succeeds_forAdmin() {
+        Booking booking = bookingWith(BookingStatus.confirmed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment existing = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.pending).gatewayOrderId("order_existing123").build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(existing));
+        AuthenticatedUser admin = new AuthenticatedUser(42L, "admin");
+
+        CreateOrderResponse response = service.createOrder(4L, admin);
+
+        assertEquals("order_existing123", response.razorpayOrderId());
     }
 
     // ---- createOrder ----------------------------------------------------
@@ -187,6 +242,54 @@ class PaymentServiceTest {
         verifyNoInteractions(razorpayClient);
     }
 
+    // ---- verifyCheckout(bookingId, request, caller) - ownership -------
+
+    @Test
+    void verifyCheckout_withCaller_throwsForbidden_beforeAnyProcessing_whenNotOwnerOrAdmin() {
+        when(bookingRepository.findById(4L))
+                .thenReturn(Optional.of(bookingWith(BookingStatus.confirmed, new BigDecimal("500.00"))));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "customer");
+
+        assertThrows(ForbiddenException.class, () -> service.verifyCheckout(
+                4L, new VerifyPaymentRequest("order_x", "pay_x", "sig_x"), stranger));
+        // "Before any processing" - the ownership check must reject this
+        // without ever touching the payment repo or Razorpay.
+        verifyNoInteractions(paymentRepository);
+        verifyNoInteractions(razorpayClient);
+    }
+
+    @Test
+    void verifyCheckout_withCaller_succeeds_forOwningCustomer() {
+        Booking booking = bookingWith(BookingStatus.completed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment payment = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.completed).gatewayOrderId("order_x").gatewayPaymentId("pay_x").build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(payment));
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        PaymentResponse response = service.verifyCheckout(
+                4L, new VerifyPaymentRequest("order_x", "pay_x", "sig_x"), owner);
+
+        assertEquals(PaymentStatus.completed, response.status());
+    }
+
+    @Test
+    void verifyCheckout_withCaller_succeeds_forAdmin() {
+        Booking booking = bookingWith(BookingStatus.completed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment payment = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.completed).gatewayOrderId("order_x").gatewayPaymentId("pay_x").build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(payment));
+        AuthenticatedUser admin = new AuthenticatedUser(42L, "admin");
+
+        PaymentResponse response = service.verifyCheckout(
+                4L, new VerifyPaymentRequest("order_x", "pay_x", "sig_x"), admin);
+
+        assertEquals(PaymentStatus.completed, response.status());
+    }
+
     // ---- handleWebhook ------------------------------------------------------
 
     @Test
@@ -267,5 +370,69 @@ class PaymentServiceTest {
 
         assertEquals(1L, response.paymentId());
         assertEquals(PaymentStatus.completed, response.status());
+    }
+
+    // ---- getPayment(bookingId, caller) - ownership ---------------------
+
+    @Test
+    void getPayment_withCaller_throwsForbidden_whenNotOwnerOrAssignedWorkerOrAdmin() {
+        when(bookingRepository.findById(4L))
+                .thenReturn(Optional.of(bookingWithWorker(BookingStatus.completed, new BigDecimal("500.00"), 2L)));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "worker");
+
+        assertThrows(ForbiddenException.class, () -> service.getPayment(4L, stranger));
+    }
+
+    @Test
+    void getPayment_withCaller_succeeds_forOwningCustomer() {
+        Booking booking = bookingWith(BookingStatus.completed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment payment = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.completed).build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(payment));
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        PaymentResponse response = service.getPayment(4L, owner);
+
+        assertEquals(1L, response.paymentId());
+    }
+
+    @Test
+    void getPayment_withCaller_succeeds_forAssignedWorker() {
+        Booking booking = bookingWithWorker(BookingStatus.completed, new BigDecimal("500.00"), 2L);
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment payment = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.completed).build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(payment));
+        AuthenticatedUser assignedWorker = new AuthenticatedUser(2L, "worker");
+
+        PaymentResponse response = service.getPayment(4L, assignedWorker);
+
+        assertEquals(1L, response.paymentId());
+    }
+
+    @Test
+    void getPayment_withCaller_succeeds_forAdmin() {
+        Booking booking = bookingWith(BookingStatus.completed, new BigDecimal("500.00"));
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(booking));
+        Payment payment = Payment.builder()
+                .paymentId(1L).booking(booking).amount(new BigDecimal("500.00"))
+                .status(PaymentStatus.completed).build();
+        when(paymentRepository.findByBooking_BookingId(4L)).thenReturn(Optional.of(payment));
+        AuthenticatedUser admin = new AuthenticatedUser(42L, "admin");
+
+        PaymentResponse response = service.getPayment(4L, admin);
+
+        assertEquals(1L, response.paymentId());
+    }
+
+    @Test
+    void getPayment_withCaller_throwsBookingNotFound_forUnknownBooking() {
+        when(bookingRepository.findById(999L)).thenReturn(Optional.empty());
+        AuthenticatedUser someone = new AuthenticatedUser(1L, "customer");
+
+        assertThrows(BookingNotFoundException.class, () -> service.getPayment(999L, someone));
     }
 }

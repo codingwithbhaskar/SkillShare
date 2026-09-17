@@ -1,9 +1,12 @@
 package com.skillshare.skillsharebackend.allocation;
 
+import com.skillshare.skillsharebackend.domain.Booking;
 import com.skillshare.skillsharebackend.domain.Worker;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.NearbyWorkerProjection;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CandidateWorkerResponse;
 import com.skillshare.skillsharebackend.web.dto.NearbyWorkerResponse;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +68,23 @@ public class SpatialSearchService {
         return workerRepository.findAllById(candidateWorkerIds).stream()
                 .map(this::toCandidateWorkerResponse)
                 .toList();
+    }
+
+    /** Ownership-checked overload {@code SpatialController} calls - only
+     *  the booking's own customer (or an admin) may preview its candidate
+     *  set, same convention as {@code AllocationScoringService}'s
+     *  caller-aware overloads. Closes a real gap: this endpoint
+     *  previously had no ownership check at all, so any authenticated
+     *  user - including an unrelated customer or an uninvolved worker -
+     *  could view another customer's candidate list. */
+    public List<CandidateWorkerResponse> findCandidatesForBooking(Long bookingId, AuthenticatedUser caller) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        boolean isOwner = booking.getCustomer().getUserId().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            throw new ForbiddenException("You do not have access to booking " + bookingId);
+        }
+        return findCandidatesForBooking(bookingId);
     }
 
     private NearbyWorkerResponse toNearbyWorkerResponse(NearbyWorkerProjection projection) {

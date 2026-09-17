@@ -12,6 +12,8 @@ import com.skillshare.skillsharebackend.domain.enums.PaymentMethod;
 import com.skillshare.skillsharebackend.domain.enums.PaymentStatus;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.PaymentRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CreateOrderResponse;
 import com.skillshare.skillsharebackend.web.dto.PaymentResponse;
 import com.skillshare.skillsharebackend.web.dto.VerifyPaymentRequest;
@@ -154,6 +156,22 @@ public class PaymentService {
         return toOrderResponse(payment);
     }
 
+    /** Ownership-checked overload {@code PaymentController} calls - only
+     *  the booking's own customer (or an admin) may start a checkout for
+     *  it, same convention as {@code AllocationScoringService}/{@code
+     *  BookingService}'s caller-aware overloads. Closes a real gap: this
+     *  endpoint previously had no ownership check at all, so any
+     *  authenticated user could create a Razorpay order (and later
+     *  {@link #getPayment(Long) read the payment record}) for a booking
+     *  that wasn't theirs. */
+    @Transactional
+    public CreateOrderResponse createOrder(Long bookingId, AuthenticatedUser caller) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        requireCustomerOrAdmin(booking, caller);
+        return createOrder(bookingId);
+    }
+
     @Transactional
     public PaymentResponse verifyCheckout(Long bookingId, VerifyPaymentRequest request) {
         Payment payment = paymentRepository.findByBooking_BookingId(bookingId)
@@ -214,6 +232,22 @@ public class PaymentService {
         return PaymentResponse.from(payment);
     }
 
+    /** Ownership-checked overload {@code PaymentController} calls - only
+     *  the booking's own customer (or an admin) may complete its
+     *  checkout. Checks ownership before any of {@link
+     *  #verifyCheckout(Long, VerifyPaymentRequest)}'s real work (signature
+     *  verification, the Razorpay API fetch, marking the payment
+     *  completed) rather than after - a forged/irrelevant verify call
+     *  from a stranger is rejected up front, not processed and then
+     *  discarded. */
+    @Transactional
+    public PaymentResponse verifyCheckout(Long bookingId, VerifyPaymentRequest request, AuthenticatedUser caller) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        requireCustomerOrAdmin(booking, caller);
+        return verifyCheckout(bookingId, request);
+    }
+
     @Transactional
     public void handleWebhook(String rawBody, String signatureHeader) {
         boolean signatureValid;
@@ -268,6 +302,37 @@ public class PaymentService {
         Payment payment = paymentRepository.findByBooking_BookingId(bookingId)
                 .orElseThrow(() -> new PaymentNotAllowedException("No payment exists yet for booking " + bookingId));
         return PaymentResponse.from(payment);
+    }
+
+    /** Ownership-checked overload {@code PaymentController} calls - the
+     *  booking's customer, its assigned worker (they have a legitimate
+     *  interest in knowing whether they'll get paid for a job), or an
+     *  admin may read the payment record; nobody else. Closes a real
+     *  gap: this endpoint previously had no ownership check at all, so
+     *  any authenticated user could read another customer's payment
+     *  status/amount/gateway payment id. */
+    @Transactional(readOnly = true)
+    public PaymentResponse getPayment(Long bookingId, AuthenticatedUser caller) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        requireCustomerOrAssignedWorkerOrAdmin(booking, caller);
+        return getPayment(bookingId);
+    }
+
+    private void requireCustomerOrAdmin(Booking booking, AuthenticatedUser caller) {
+        boolean isOwner = booking.getCustomer().getUserId().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            throw new ForbiddenException("You do not have access to booking " + booking.getBookingId());
+        }
+    }
+
+    private void requireCustomerOrAssignedWorkerOrAdmin(Booking booking, AuthenticatedUser caller) {
+        boolean isCustomer = booking.getCustomer().getUserId().equals(caller.userId());
+        boolean isAssignedWorker = booking.getWorker() != null
+                && booking.getWorker().getUser().getUserId().equals(caller.userId());
+        if (!isCustomer && !isAssignedWorker && !caller.isAdmin()) {
+            throw new ForbiddenException("You do not have access to booking " + booking.getBookingId());
+        }
     }
 
     private void applyCompletion(Payment payment, String gatewayPaymentId, String gatewaySignature, String method) {

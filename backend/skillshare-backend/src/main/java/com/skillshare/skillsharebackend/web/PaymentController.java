@@ -1,12 +1,14 @@
 package com.skillshare.skillsharebackend.web;
 
 import com.skillshare.skillsharebackend.payment.PaymentService;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
 import com.skillshare.skillsharebackend.web.dto.CreateOrderResponse;
 import com.skillshare.skillsharebackend.web.dto.PaymentResponse;
 import com.skillshare.skillsharebackend.web.dto.VerifyPaymentRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,21 +36,22 @@ public class PaymentController {
      *  confirmed booking - the frontend uses the response to open
      *  Checkout.js. */
     @PostMapping("/bookings/{bookingId}/order")
-    public CreateOrderResponse createOrder(@PathVariable Long bookingId) {
-        return paymentService.createOrder(bookingId);
+    public CreateOrderResponse createOrder(@PathVariable Long bookingId, Authentication authentication) {
+        return paymentService.createOrder(bookingId, AuthenticatedUser.from(authentication));
     }
 
     /** The frontend's post-checkout callback - verifies the signature,
      *  then confirms via Razorpay's own API before marking the payment
      *  completed. */
     @PostMapping("/bookings/{bookingId}/verify")
-    public PaymentResponse verify(@PathVariable Long bookingId, @RequestBody VerifyPaymentRequest request) {
-        return paymentService.verifyCheckout(bookingId, request);
+    public PaymentResponse verify(
+            @PathVariable Long bookingId, @RequestBody VerifyPaymentRequest request, Authentication authentication) {
+        return paymentService.verifyCheckout(bookingId, request, AuthenticatedUser.from(authentication));
     }
 
     @GetMapping("/bookings/{bookingId}")
-    public PaymentResponse getPayment(@PathVariable Long bookingId) {
-        return paymentService.getPayment(bookingId);
+    public PaymentResponse getPayment(@PathVariable Long bookingId, Authentication authentication) {
+        return paymentService.getPayment(bookingId, AuthenticatedUser.from(authentication));
     }
 
     /**

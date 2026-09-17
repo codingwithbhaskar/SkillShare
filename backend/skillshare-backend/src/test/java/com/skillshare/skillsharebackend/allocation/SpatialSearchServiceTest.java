@@ -1,10 +1,14 @@
 package com.skillshare.skillsharebackend.allocation;
 
+import com.skillshare.skillsharebackend.domain.Booking;
+import com.skillshare.skillsharebackend.domain.User;
 import com.skillshare.skillsharebackend.domain.Worker;
 import com.skillshare.skillsharebackend.domain.enums.AccountStatus;
 import com.skillshare.skillsharebackend.repository.BookingRepository;
 import com.skillshare.skillsharebackend.repository.NearbyWorkerProjection;
 import com.skillshare.skillsharebackend.repository.WorkerRepository;
+import com.skillshare.skillsharebackend.security.AuthenticatedUser;
+import com.skillshare.skillsharebackend.security.ForbiddenException;
 import com.skillshare.skillsharebackend.web.dto.CandidateWorkerResponse;
 import com.skillshare.skillsharebackend.web.dto.NearbyWorkerResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -132,5 +137,51 @@ class SpatialSearchServiceTest {
         when(bookingRepository.existsById(unknownBookingId)).thenReturn(false);
 
         assertThrows(BookingNotFoundException.class, () -> service.findCandidatesForBooking(unknownBookingId));
+    }
+
+    // ---- findCandidatesForBooking(bookingId, caller) - ownership -------
+
+    private Booking bookingOwnedBy(Long customerId) {
+        return Booking.builder().bookingId(4L).customer(User.builder().userId(customerId).build()).build();
+    }
+
+    @Test
+    void findCandidatesForBooking_withCaller_throwsForbidden_whenNotOwnerOrAdmin() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        AuthenticatedUser stranger = new AuthenticatedUser(999L, "worker");
+
+        assertThrows(ForbiddenException.class, () -> service.findCandidatesForBooking(4L, stranger));
+    }
+
+    @Test
+    void findCandidatesForBooking_withCaller_succeeds_forOwningCustomer() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        when(bookingRepository.existsById(4L)).thenReturn(true);
+        when(workerRepository.findCandidateWorkerIds(4L)).thenReturn(Collections.emptyList());
+        AuthenticatedUser owner = new AuthenticatedUser(1L, "customer");
+
+        List<CandidateWorkerResponse> result = service.findCandidatesForBooking(4L, owner);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void findCandidatesForBooking_withCaller_succeeds_forAdmin() {
+        when(bookingRepository.findById(4L)).thenReturn(Optional.of(bookingOwnedBy(1L)));
+        when(bookingRepository.existsById(4L)).thenReturn(true);
+        when(workerRepository.findCandidateWorkerIds(4L)).thenReturn(Collections.emptyList());
+        AuthenticatedUser admin = new AuthenticatedUser(42L, "admin");
+
+        List<CandidateWorkerResponse> result = service.findCandidatesForBooking(4L, admin);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void findCandidatesForBooking_withCaller_throwsBookingNotFound_forUnknownBooking() {
+        when(bookingRepository.findById(999L)).thenReturn(Optional.empty());
+        AuthenticatedUser someone = new AuthenticatedUser(1L, "customer");
+
+        assertThrows(BookingNotFoundException.class, () -> service.findCandidatesForBooking(999L, someone));
     }
 }
