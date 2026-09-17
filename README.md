@@ -75,9 +75,15 @@ SkillShare/
 │   └── src/main/resources/db/migration/   Flyway migrations (V1–V8)
 ├── frontend/                     React + Vite SPA
 ├── db/                           Canonical SQL — schema, triggers, views,
-│                                  functions/procedures, seed data
-│                                  (Flyway migrations are byte-identical
-│                                  copies, just reordered/renamed)
+│                                  functions/procedures, seed data. The
+│                                  first 5 Flyway migrations (V1–V5) are
+│                                  byte-identical copies of these files,
+│                                  just reordered/renamed; V6 onward are
+│                                  incremental deltas (e.g. "add these 3
+│                                  columns") applied on top as the schema
+│                                  evolved after the initial build, with
+│                                  the equivalent change also folded back
+│                                  into the matching canonical file here
 ├── docs/                         Deployment guide, full dev history
 └── benchmark/                    Query-optimization benchmark harness
                                    and results (Python + raw SQL)
@@ -88,21 +94,33 @@ SkillShare/
 ## Running it locally
 
 ### Prerequisites
-JDK 21, Maven, Node.js, PostgreSQL 16+ with the PostGIS extension
+JDK 21, Maven, Node.js, PostgreSQL 16 with the PostGIS extension
 available, Docker (optional, for the Testcontainers-backed test profile).
 
 ### Database
+`application-dev.yml` is hardcoded to `jdbc:postgresql://localhost:5433/skillshare_dev`,
+username `postgres` — **port 5433, not Postgres' default 5432** (this
+project's dev machine also has a second, PostGIS-less Postgres install on
+the default port, so 5433 is used deliberately to avoid colliding with
+it). Either run your Postgres 16 instance on port 5433, or edit that URL
+to match wherever yours actually listens.
+
 ```bash
-createdb skillshare_dev
-# Flyway applies db/01_schema_v3.sql … 06_seed_data_v3.sql (as
-# V1__schema.sql … V5__seed.sql) automatically on first backend boot —
-# no manual schema step needed.
+createdb -p 5433 skillshare_dev
 ```
+Set `SKILLSHARE_DB_PASSWORD` as an environment variable (matching that
+Postgres instance's `postgres` user password) before starting the
+backend below — Flyway then applies `db/01_schema_v3.sql` …
+`06_seed_data_v3.sql` (as `V1__schema.sql` … `V5__seed.sql`, plus V6–V8)
+automatically on first boot, including `CREATE EXTENSION postgis`. No
+manual schema step needed, but the `postgis` extension's shared library
+must already be installed on the Postgres server itself (a plain
+`CREATE EXTENSION` can't install what isn't there) — see the PostGIS
+project's own install docs for your OS if `postgis` isn't available yet.
 
 ### Backend
 ```bash
 cd backend/skillshare-backend
-# Set SKILLSHARE_DB_PASSWORD as an env var first (see application-dev.yml)
 ./mvnw spring-boot:run
 ```
 Runs on `http://localhost:8080`, profile `dev` by default.
@@ -119,7 +137,7 @@ Runs on `http://localhost:5173`.
 ### Tests
 ```bash
 cd backend/skillshare-backend
-./mvnw test   # 149 tests — unit tests + a Testcontainers context-load test
+./mvnw test   # 163 tests — unit tests + a Testcontainers context-load test
 ```
 
 ---
@@ -145,8 +163,11 @@ limitations are in [`docs/deployment-guide.md`](docs/deployment-guide.md).
 
 - Real secrets (DB password, JWT secret, Razorpay/Brevo/routing keys) are
   never hardcoded — always `${ENV_VAR}` placeholders.
-- Canonical SQL lives in `db/*.sql`; Flyway migrations mirror it
-  byte-for-byte, just reordered into dependency order.
+- Canonical SQL lives in `db/*.sql`. The initial schema (V1–V5) mirrors
+  it byte-for-byte, just reordered into dependency order; later schema
+  changes (V6+) are additive deltas, with each one also folded back into
+  the matching canonical file so `db/` always reflects the current
+  schema in full, not just its original state.
 - All scoring/allocation logic lives in the database (PL/pgSQL) — the
   Spring Boot layer calls into it, it doesn't reimplement it.
 
